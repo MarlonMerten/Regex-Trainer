@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Kursmaterial bleibt lokal (das Repo ist öffentlich)
+Praktikum_*.ipynb
+*.txt
+!**/requirements.txt
+
+# Deployment-Archiv
+code.tar.gz
