@@ -199,7 +199,9 @@ test('Systemtheme folgt dem Betriebssystem und respektiert eine manuelle Wahl', 
 });
 
 test('alle Bereiche bestehen stabilisiert in Dark und Light den WCAG-A/AA-Check', async ({ page }) => {
-  test.setTimeout(30_000);
+  // Dieser Test prueft 28 vollstaendig gerenderte Zustaende. Auf den
+  // kleineren GitHub-Runnern braucht Axe dafuer deutlich laenger als lokal.
+  test.setTimeout(process.env.CI ? 90_000 : 45_000);
   for (const scheme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
     for (const route of ['start', 'learn', 'ref', 'play', 'train', 'quiz']) {
