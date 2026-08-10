@@ -6,13 +6,11 @@
   var RT = global.RT, U = RT.ui, el = U.el, E = RT.engine;
 
   var DEFAULTS = {
-    pattern: '\\d+(?:[.,]\\d+)?\\s*(?:€|[Ee]uros?)',
+    pattern: '\\d+',
     flags: '',
     fn: 'findall',
     repl: '',
-    text: 'A hat 200 euro an B gegeben für ein Gerät das trotz 50 kg nur 100Euro wert ist. ' +
-          'Immerhin hat B A danach für 20.50 Euros zum Essen eingeladen. Die 0,50 euro Trinkgeld ' +
-          'zeigen aber wie geizig er ist. Am liebsten würde A 500 € pro Tag verdienen.'
+    text: 'Heute sind 3 Aufgaben offen und 12 bereits gelöst.'
   };
 
   var SNIPPETS = [
@@ -22,7 +20,7 @@
   ];
 
   var EXAMPLES = [
-    { label: 'Geldbeträge', pattern: '\\d+(?:[.,]\\d+)?\\s*(?:€|[Ee]uros?)', flags: '', text: DEFAULTS.text },
+    { label: 'Geldbeträge', pattern: '\\d+(?:[.,]\\d+)?\\s*(?:€|[Ee]uros?)', flags: '', text: 'Kosten: 20 Euro, 3,50 € und 100Euro.' },
     { label: 'E-Mail', pattern: '[\\w.+-]+@[\\w-]+\\.[\\w.]+', flags: '', text: 'Kontakt: anna@uni.de und support@firma.co.uk — spam@ ist keins.' },
     { label: 'IP-Adresse', pattern: '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b', flags: '', text: 'Server 192.168.0.1 und 10.0.0.42 im Log, dazu 999.999.1.1 als Fehleintrag.' },
     { label: 'Log-Zeile', pattern: '^\\[(\\d{4}-\\d{2}-\\d{2})\\]\\s+(\\w+)\\s+(.*)$', flags: 'm', text: '[2024-12-24] ERROR Festplatte voll\n[2024-12-24] INFO Backup ok' },
@@ -87,8 +85,7 @@
         el('span', { class: 'label', text: 'Muster' }),
         el('span', { class: 'hint-r', id: 'pg-gcount' })
       ]),
-      rx.node,
-      el('div', { class: 'pg-row pg-row-tight' }, [flags.node, fnSel, replWrap, exampleSel])
+      rx.node
     ]);
 
     /* ---------- Bausteine zum Einfügen ---------- */
@@ -98,6 +95,16 @@
       b.addEventListener('click', function () { insert(s); });
       snips.appendChild(b);
     });
+
+    var advanced = el('details', {
+      class: 'pg-advanced', open: global.matchMedia && global.matchMedia('(min-width: 781px)').matches ? '' : null
+    }, [
+      el('summary', { text: 'Weitere Optionen & Bausteine' }),
+      el('div', { class: 'pg-advanced-body' }, [
+        el('div', { class: 'pg-row pg-row-tight' }, [flags.node, fnSel, replWrap, exampleSel]),
+        snips
+      ])
+    ]);
 
     /* ---------- Textbereich ---------- */
     ed = U.makeEditor({ onInput: function (v) { st.text = v; requestRender(); }, placeholder: 'Testtext …', ariaLabel: 'Testtext' });
@@ -121,27 +128,32 @@
     pyBox = el('pre', { class: 'code', style: 'margin:0' });
     var copyPy = el('button', { class: 'btn sm ghost', type: 'button', html: U.icon('copy') + ' Kopieren' });
     copyPy.addEventListener('click', function () { U.copyText(pyBox.textContent); });
-    var pyBlock = el('div', { class: 'pg-block' }, [
-      el('div', { class: 'field-head' }, [
+    var pyInner = el('div', { class: 'pg-block' }, [
+      el('div', { class: 'field-head pg-detail-head' }, [
         el('span', { class: 'label', text: 'Als Python' }), copyPy
       ]),
       pyBox
     ]);
+    var pyBlock = el('details', {
+      class: 'card card-pad pg-collapse', open: global.matchMedia && global.matchMedia('(min-width: 781px)').matches ? '' : null
+    }, [el('summary', { text: 'Python-Code anzeigen' }), pyInner]);
 
     var main = el('div', { class: 'pg-main' }, [
-      el('div', { class: 'card card-pad' }, [patternBlock, el('div', { style: 'height:12px' }), snips]),
+      el('div', { class: 'card card-pad' }, [patternBlock, advanced]),
       el('div', { class: 'card card-pad' }, textBlock),
       el('div', { class: 'card card-pad' }, resultBlock),
-      el('div', { class: 'card card-pad' }, pyBlock)
+      pyBlock
     ]);
 
     /* ---------- Seitenleiste ---------- */
     tokBox = el('div', { class: 'tokens' });
     summaryBox = el('div', { style: 'font-size:13px;color:var(--text-2);margin-top:10px' });
     tokList = el('ul', { class: 'tok-list', role: 'list' });
-    var explainCard = el('div', { class: 'card card-pad' }, [
-      el('span', { class: 'label', text: 'Muster erklärt' }),
-      tokBox, summaryBox, tokList
+    var explainCard = el('details', {
+      class: 'card card-pad pg-collapse', open: global.matchMedia && global.matchMedia('(min-width: 781px)').matches ? '' : null
+    }, [
+      el('summary', { text: 'Muster Schritt für Schritt erklärt' }),
+      el('div', { class: 'pg-collapse-body' }, [tokBox, summaryBox, tokList])
     ]);
 
     matchBox = el('div', { class: 'match-list' });

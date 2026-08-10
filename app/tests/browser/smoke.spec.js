@@ -14,8 +14,8 @@ async function captureRuntimeErrors(page) {
 
 async function waitForStableRender(page, scheme) {
   const expected = scheme === 'light'
-    ? { color: 'rgb(19, 26, 42)', background: 'rgb(246, 247, 251)' }
-    : { color: 'rgb(232, 236, 246)', background: 'rgb(10, 14, 23)' };
+    ? { color: 'rgb(23, 29, 43)', background: 'rgb(244, 246, 251)' }
+    : { color: 'rgb(245, 247, 252)', background: 'rgb(11, 16, 26)' };
   await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
   await page.waitForFunction(colors => {
     const style = getComputedStyle(document.body);
@@ -41,20 +41,20 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('alle fünf Bereiche starten und bleiben ohne Laufzeitfehler', async ({ page }) => {
+test('Start und alle fünf Arbeitsbereiche bleiben ohne Laufzeitfehler', async ({ page }) => {
   const errors = await captureRuntimeErrors(page);
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'Lernpfad' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Was eine Regex eigentlich ist' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Regex verstehen. Nicht nur auswendig lernen.' })).toBeVisible();
+  await expect(page.getByText('Direkt loslegen · ohne Anmeldung')).toBeVisible();
 
   const nav = page.locator('#nav');
   const destinations = [
-    ['Nachschlagen', 'Nachschlagen'],
+    ['Lexikon', 'Nachschlagen'],
     ['Playground', 'Playground'],
-    ['Training', 'Training'],
+    ['Üben', 'Üben'],
     ['Quiz', 'Quiz'],
-    ['Lernen', 'Lernpfad']
+    ['Lernen', 'Lernen']
   ];
   for (const [name, heading] of destinations) {
     await nav.getByRole('button', { name, exact: true }).click();
@@ -130,13 +130,23 @@ test('Quizantworten bleiben als bedienbare Buttons zugänglich', async ({ page }
   expect(errors).toEqual([]);
 });
 
+test('Schnellquiz enthält zehn eindeutige Fragen und die Tagesfrage wird angepinnt', async ({ page }) => {
+  await page.goto('/#quiz/quick');
+  await expect(page.locator('.quiz-meta .tag').first()).toHaveText('Frage 1 / 10');
+  const ids = await page.evaluate(() => RT.quiz.map(question => question.id));
+  expect(new Set(ids).size).toBe(ids.length);
+
+  await page.goto('/#quiz/daily-q37');
+  const expectedQuestion = await page.evaluate(() => RT.quiz.find(question => question.id === 'q37').q.replace(/<[^>]+>/g, ''));
+  await expect(page.locator('#quiz-question')).toContainText(expectedQuestion);
+});
+
 test('beworbener file-Direktstart lädt die Anwendung', async ({ page }) => {
   const errors = await captureRuntimeErrors(page);
   const indexPath = path.join(__dirname, '..', '..', 'index.html');
   await page.goto(pathToFileURL(indexPath).href);
 
-  await expect(page.getByRole('heading', { name: 'Lernpfad' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Was eine Regex eigentlich ist' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Regex verstehen. Nicht nur auswendig lernen.' })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -165,7 +175,7 @@ test('installierte App startet nach dem ersten Laden offline', async ({ page, co
   await context.setOffline(true);
   try {
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Lernpfad' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Regex verstehen. Nicht nur auswendig lernen.' })).toBeVisible();
   } finally {
     await context.setOffline(false);
   }
@@ -192,7 +202,7 @@ test('alle Bereiche bestehen stabilisiert in Dark und Light den WCAG-A/AA-Check'
   test.setTimeout(30_000);
   for (const scheme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
-    for (const route of ['learn', 'ref', 'play', 'train', 'quiz']) {
+    for (const route of ['start', 'learn', 'ref', 'play', 'train', 'quiz']) {
       await page.goto('/#' + route);
       await expect(page.locator('#view-' + route)).toHaveClass(/\bon\b/);
       await waitForStableRender(page, scheme);
@@ -229,8 +239,8 @@ test('mobile Navigation bleibt bedienbar und erzeugt keinen Seiten-Overflow', as
   await page.goto('/');
 
   const nav = page.locator('#nav');
-  await nav.getByRole('button', { name: 'Training', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Training', exact: true })).toBeVisible();
+  await nav.getByRole('button', { name: 'Üben', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Üben', exact: true })).toBeVisible();
 
   const overflows = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflows).toBe(false);

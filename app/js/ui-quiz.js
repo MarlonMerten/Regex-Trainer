@@ -5,21 +5,41 @@
   'use strict';
   var RT = global.RT, U = RT.ui, el = U.el;
 
-  var wrap, bar, body, foot;
+  var wrap, bar, body, foot, modeRow, filterRow;
   var pool = [], pos = 0, right = 0, answered = false;
   var levelFilter = 0;
   var retryWrong = false;
+  var sessionSize = 10;
+  var requiredId = null;
   var pendingRoute = null;
 
   function build(container) {
-    levelFilter = 0;
-    retryWrong = pendingRoute === 'retry';
+    applyRoute(pendingRoute || 'quick');
     container.appendChild(el('div', { class: 'page-head' }, [
       el('h1', { text: 'Quiz' }),
-      el('p', { text: RT.quiz.length + ' Fragen nach Klausurmuster: Was gibt dieser Aufruf zurück? Welches Muster ist richtig? Jede Antwort wird erklärt.' })
+      el('p', { text: 'Kurze, zufällig gemischte Runden aus ' + RT.quiz.length + ' Fragen. Du bekommst nach jeder Antwort sofort eine verständliche Erklärung.' })
     ]));
 
-    var filterRow = el('div', { class: 'pg-row quiz-filters', role: 'group', 'aria-label': 'Quiz-Auswahl' });
+    modeRow = el('div', { class: 'quiz-mode-row', role: 'group', 'aria-label': 'Länge der Quiz-Runde' });
+    [[10, '10 Fragen', 'Schnellrunde'], [20, '20 Fragen', 'Intensiv'], [0, 'Alle', RT.quiz.length + ' Fragen']]
+      .forEach(function (choice) {
+        var active = !retryWrong && sessionSize === choice[0];
+        var button = el('button', {
+          type: 'button', class: 'session-choice' + (active ? ' on' : ''),
+          'aria-pressed': active ? 'true' : 'false'
+        }, [el('strong', { text: choice[1] }), el('span', { text: choice[2] })]);
+        button.addEventListener('click', function () {
+          retryWrong = false;
+          requiredId = null;
+          sessionSize = choice[0];
+          RT.setRoute('quiz', choice[0] === 10 ? 'quick' : (choice[0] === 20 ? 'mix20' : 'all'));
+          refreshControls();
+          start();
+        });
+        modeRow.appendChild(button);
+      });
+
+    filterRow = el('div', { class: 'pg-row quiz-filters', role: 'group', 'aria-label': 'Schwierigkeit auswählen' });
     [[0, 'Alle Stufen']].concat(RT.levels.map(function (l) { return [l.id, 'Stufe ' + l.id]; }))
       .forEach(function (f) {
         var active = f[0] === levelFilter && !retryWrong;
@@ -30,8 +50,9 @@
         c.addEventListener('click', function () {
           levelFilter = f[0];
           retryWrong = false;
-          RT.setRoute('quiz', null);
-          refreshChips(filterRow);
+          requiredId = null;
+          RT.setRoute('quiz', sessionSize === 20 ? 'mix20' : (sessionSize === 0 ? 'all' : 'quick'));
+          refreshControls();
           start();
         });
         filterRow.appendChild(c);
@@ -44,7 +65,8 @@
     retryChip.addEventListener('click', function () {
       retryWrong = true;
       levelFilter = 0;
-      refreshChips(filterRow);
+      requiredId = null;
+      refreshControls();
       RT.setRoute('quiz', 'retry');
       start();
     });
@@ -57,13 +79,18 @@
     body = el('div', { class: 'card card-pad' });
     foot = el('div', { class: 'quiz-foot' });
 
-    wrap = el('div', { class: 'quiz-wrap' }, [filterRow, bar, body, foot]);
+    wrap = el('div', { class: 'quiz-wrap' }, [
+      el('div', { class: 'quiz-setup card' }, [
+        el('div', { class: 'setup-label', text: 'Rundenlänge' }), modeRow,
+        el('div', { class: 'setup-label', text: 'Schwierigkeit' }), filterRow
+      ]),
+      bar, body, foot
+    ]);
     container.appendChild(wrap);
 
-    if (pendingRoute === 'retry') {
-      retryWrong = true;
-      pendingRoute = null;
-    }
+    pendingRoute = null;
+    RT.setRoute('quiz', retryWrong ? 'retry' : (requiredId ? 'daily-' + requiredId : (sessionSize === 20 ? 'mix20' : (sessionSize === 0 ? 'all' : 'quick'))), { history: 'replace' });
+    refreshControls();
     start();
   }
 
@@ -80,27 +107,39 @@
     });
   }
 
+  function refreshControls() {
+    if (filterRow) refreshChips(filterRow);
+    if (modeRow) U.$$('.session-choice', modeRow).forEach(function (button, index) {
+      var size = [10, 20, 0][index];
+      var active = !retryWrong && sessionSize === size;
+      button.classList.toggle('on', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function applyRoute(sub) {
+    levelFilter = 0;
+    retryWrong = false;
+    requiredId = null;
+    sessionSize = 10;
+    if (sub === 'retry') retryWrong = true;
+    else if (sub === 'all') sessionSize = 0;
+    else if (sub === 'mix20') sessionSize = 20;
+    else if (sub && sub.indexOf('daily-') === 0) requiredId = sub.slice(6);
+  }
+
   function openRoute(sub) {
-    if (sub === 'retry') {
-      retryWrong = true;
-      levelFilter = 0;
-      if (wrap) {
-        var row = wrap.querySelector('.quiz-filters');
-        if (row) refreshChips(row);
-        start();
-      } else {
-        pendingRoute = 'retry';
-      }
-    } else {
-      retryWrong = false;
-      levelFilter = 0;
-      if (wrap) {
-        var row = wrap.querySelector('.quiz-filters');
-        if (row) refreshChips(row);
-        start();
-      }
-      if (sub) RT.setRoute('quiz', null);
+    var validDaily = sub && sub.indexOf('daily-') === 0 && RT.quiz.some(function (q) { return q.id === sub.slice(6); });
+    var valid = !sub || sub === 'quick' || sub === 'mix20' || sub === 'all' || sub === 'retry' || validDaily;
+    var route = valid ? (sub || 'quick') : 'quick';
+    applyRoute(route);
+    if (!wrap) {
+      pendingRoute = route;
+      return;
     }
+    refreshControls();
+    start();
+    RT.setRoute('quiz', route, { history: 'replace' });
   }
 
   function shuffle(a) {
@@ -112,11 +151,31 @@
   }
 
   function start() {
-    pool = RT.quiz.filter(function (q) {
+    var candidates = RT.quiz.filter(function (q) {
       if (retryWrong) return RT.store.quizResult(q.id) === false;
       return !levelFilter || q.level === levelFilter;
     });
-    pool = shuffle(pool.slice());
+    if (retryWrong) {
+      pool = shuffle(candidates.slice());
+    } else {
+      var unseen = [], wrong = [], mastered = [];
+      candidates.forEach(function (q) {
+        var result = RT.store.quizResult(q.id);
+        if (result === undefined) unseen.push(q);
+        else if (result === false) wrong.push(q);
+        else mastered.push(q);
+      });
+      pool = shuffle(wrong).concat(shuffle(unseen), shuffle(mastered));
+      if (requiredId) {
+        var required = RT.quiz.find(function (q) { return q.id === requiredId; });
+        pool = pool.filter(function (q) { return q.id !== requiredId; });
+        if (required && (!levelFilter || required.level === levelFilter)) pool.unshift(required);
+      }
+      if (sessionSize) pool = pool.slice(0, sessionSize);
+      /* Die Kategorien werden priorisiert, innerhalb der Runde aber gemischt.
+         Eine angepinnte Tagesfrage bleibt bewusst an erster Stelle. */
+      if (!requiredId) shuffle(pool);
+    }
     pos = 0; right = 0;
     bar.setAttribute('aria-valuemax', String(pool.length));
     if (!pool.length) {
@@ -134,6 +193,7 @@
       el('div', { text: retryWrong ? 'Keine falsch beantworteten Fragen — erst mal ein Quiz durchspielen.' : 'Keine Fragen in dieser Auswahl.' })
     ]));
     foot.innerHTML = '';
+    foot.classList.remove('is-actionable');
   }
 
   function renderQ() {
@@ -213,6 +273,7 @@
   function renderFoot(q) {
     var seen = pos + (answered ? 1 : 0);
     foot.innerHTML = '';
+    foot.classList.toggle('is-actionable', answered);
     foot.appendChild(el('span', { class: 'score', 'aria-live': 'polite', html: 'Richtig: <b>' + right + '</b> von <b>' + seen + '</b>' }));
     var next = el('button', { class: 'btn primary', type: 'button', html: (pos + 1 >= pool.length ? 'Auswertung' : 'Weiter') + ' &nbsp;&rarr;' });
     next.disabled = !answered;
@@ -242,7 +303,10 @@
           var b = el('button', { class: 'btn ghost', type: 'button', text: 'Falsche wiederholen' });
           b.addEventListener('click', function () {
             retryWrong = true;
+            requiredId = null;
+            levelFilter = 0;
             RT.setRoute('quiz', 'retry');
+            refreshControls();
             start();
           });
           return b;
@@ -255,6 +319,7 @@
       ])
     ]));
     foot.innerHTML = '';
+    foot.classList.remove('is-actionable');
     requestAnimationFrame(function () {
       var heading = body && body.querySelector('h2');
       if (heading) heading.focus({ preventScroll: true });

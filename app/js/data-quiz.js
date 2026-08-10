@@ -361,6 +361,239 @@
       ],
       correct: 0,
       why: '<code>\\z</code> wurde in Python 3.14 als Anker für das absolute Stringende ergänzt. <code>\\Z</code> hat dort dieselbe Bedeutung; in älteren Python-Versionen verwendet man <code>\\Z</code>.'
+    },
+
+    /* ---------- Neue Fragen · Stufe 1 ---------- */
+    {
+      id: 'q37', level: 1, q: 'Was liefert dieser Aufruf?',
+      code: 're.findall(r"\\.", "Version 1.2.0")',
+      options: ["['1', '2', '0']", "['.', '.']", "['1.2.0']", '[]'],
+      correct: 1,
+      why: 'Der Backslash nimmt dem Punkt seine Sonderbedeutung. <code>\\.</code> findet deshalb nur echte Punkte — hier genau zwei.',
+      demo: { pattern: '\\.', text: 'Version 1.2.0' }
+    },
+    {
+      id: 'q38', level: 1, q: 'Welche Aussage über Raw Strings in Python stimmt?',
+      options: [
+        'Sie machen eine Regex automatisch unabhängig von Groß- und Kleinschreibung',
+        'Sie machen alle Regex-Metazeichen wörtlich',
+        'Sie reichen Backslashes weitgehend unverändert an die Regex-Engine weiter; das r gehört nur zur Python-Stringsyntax',
+        'Sie dürfen keine Leerzeichen enthalten'
+      ],
+      correct: 2,
+      why: 'Das <code>r</code> steuert, wie Python den String liest. Die Regex-Engine erhält danach nur den Stringinhalt; Sonderzeichen wie <code>+</code> behalten ihre Regex-Bedeutung.'
+    },
+    {
+      id: 'q39', level: 1, q: 'Welches Muster findet exakt den Text <code>A+B</code>?',
+      options: ['<code>A+B</code>', '<code>A[+]B</code>', '<code>A.B</code>', '<code>A\\wB</code>'],
+      correct: 1,
+      why: 'In <code>[+]</code> ist das Plus ein wörtliches Zeichen. Außerhalb der Klasse wäre <code>A\\+B</code> gleichwertig; ein unmaskiertes <code>+</code> quantifiziert das A.',
+      demo: { pattern: 'A[+]B', text: 'A+B, AB und AAB' }
+    },
+    {
+      id: 'q40', level: 1, q: 'Was liefert dieser Aufruf?',
+      code: 're.findall(r"[A-Z]+", "ID-AB12-x")',
+      options: ["['ID-AB']", "['I', 'D', 'A', 'B']", "['ID', 'AB']", "['ID', 'AB', 'x']"],
+      correct: 2,
+      why: '<code>[A-Z]+</code> nimmt jeweils eine zusammenhängende Folge von Großbuchstaben. Bindestrich, Ziffern und das kleine x beenden einen Treffer.',
+      demo: { pattern: '[A-Z]+', text: 'ID-AB12-x' }
+    },
+    {
+      id: 'q41', level: 1, q: 'Welche Funktion passt, wenn die <b>gesamte</b> Eingabe dem Muster entsprechen muss?',
+      options: ['<code>re.search()</code>', '<code>re.findall()</code>', '<code>re.match()</code>', '<code>re.fullmatch()</code>'],
+      correct: 3,
+      why: '<code>fullmatch</code> akzeptiert nur, wenn das Muster den kompletten String verbraucht. <code>match</code> verlangt lediglich einen Treffer am Anfang.',
+      demo: { pattern: '[0-9]{5}', text: '50667', fn: 'fullmatch' }
+    },
+
+    /* ---------- Neue Fragen · Stufe 2 ---------- */
+    {
+      id: 'q42', level: 2, q: 'Welche Prüfung akzeptiert <b>genau fünf ASCII-Ziffern</b> und sonst nichts?',
+      options: [
+        '<code>re.search(r"\\d{5}", wert)</code>',
+        '<code>re.fullmatch(r"[0-9]{5}", wert)</code>',
+        '<code>re.match(r"[0-9]+", wert)</code>',
+        '<code>re.fullmatch(r".{5}", wert)</code>'
+      ],
+      correct: 1,
+      why: '<code>fullmatch</code> prüft den gesamten String, <code>{5}</code> fordert genau fünf Zeichen und <code>[0-9]</code> beschränkt sie ausdrücklich auf ASCII-Ziffern.'
+    },
+    {
+      id: 'q43', level: 2, q: 'Was liefert dieser Aufruf bei einem Python-<code>str</code>?',
+      code: 'bool(re.fullmatch(r"\\d{2}", "٣٤"))',
+      options: ['False', 'True', 'None', 'Eine Exception'],
+      correct: 1,
+      why: '<code>\\d</code> ist bei Unicode-Strings nicht auf 0 bis 9 beschränkt. Die arabisch-indischen Zeichen ٣ und ٤ sind Unicode-Dezimalziffern.',
+      demo: { pattern: '\\d{2}', text: '٣٤', fn: 'fullmatch' }
+    },
+    {
+      id: 'q44', level: 2, q: 'Welche Zeichenkette ist als Python-Raw-String <b>nicht</b> möglich?',
+      options: [
+        'Ein Raw String mit <code>\\d+</code> im Inhalt',
+        'Ein Raw String mit Leerzeichen im Inhalt',
+        'Ein Raw String, dessen Inhalt mit genau einem Backslash endet',
+        'Ein Raw String mit zwei Backslashes am Ende'
+      ],
+      correct: 2,
+      why: 'Eine ungerade Zahl von Backslashes direkt vor dem schließenden Anführungszeichen maskiert dieses noch auf der Ebene der Python-Stringsyntax. Der String wäre daher nicht korrekt abgeschlossen.'
+    },
+    {
+      id: 'q45', level: 2, q: 'Welche Eingabe akzeptiert <code>muster.fullmatch(...)</code>?',
+      code: 'teil = "a+b?"\nmuster = re.compile(re.escape(teil))',
+      options: [
+        '<code>"xxa+b?yy"</code>',
+        '<code>"ab"</code>',
+        '<code>"a+b?"</code>',
+        '<code>"aab"</code>'
+      ],
+      correct: 2,
+      why: '<code>re.escape()</code> maskiert Plus und Fragezeichen als wörtliche Zeichen. <code>fullmatch</code> verlangt zusätzlich, dass die komplette Eingabe genau diesem Text entspricht.'
+    },
+    {
+      id: 'q46', level: 2, q: 'Welche Variante validiert ausschließlich „ja“ oder „nein“, unabhängig von der Großschreibung?',
+      options: [
+        '<code>re.search(r"ja|nein", wert)</code>',
+        '<code>re.match(r"[ja|nein]", wert, re.I)</code>',
+        '<code>re.findall(r"ja|nein", wert, re.M)</code>',
+        '<code>re.fullmatch(r"(?:ja|nein)", wert, re.I)</code>'
+      ],
+      correct: 3,
+      why: 'Die nicht-fangende Gruppe begrenzt die Alternative, <code>fullmatch</code> verlangt die komplette Eingabe und <code>re.I</code> ignoriert die Großschreibung.'
+    },
+
+    /* ---------- Neue Fragen · Stufe 3 ---------- */
+    {
+      id: 'q47', level: 3, q: 'Was liefert dieser Ausdruck?',
+      code: '(bool(re.search(r"\\d{5}", "PLZ 50667")),\n bool(re.fullmatch(r"\\d{5}", "PLZ 50667")))',
+      options: ['(False, False)', '(True, True)', '(True, False)', '(False, True)'],
+      correct: 2,
+      why: '<code>search</code> findet die fünf Ziffern innerhalb des Textes. <code>fullmatch</code> scheitert, weil „PLZ “ nicht vom Muster abgedeckt wird.'
+    },
+    {
+      id: 'q48', level: 3, q: 'Was ergibt dieses Tupel?',
+      code: 'text = "OK\\n"\n(bool(re.match(r"^[A-Z]+$", text)),\n bool(re.fullmatch(r"[A-Z]+", text)))',
+      options: ['(False, False)', '(True, False)', '(True, True)', '(False, True)'],
+      correct: 1,
+      why: '<code>$</code> darf direkt vor einem abschließenden Zeilenumbruch passen. <code>fullmatch</code> verlangt dagegen, dass auch wirklich kein Zeichen übrig bleibt.'
+    },
+    {
+      id: 'q49', level: 3, q: 'Ein Datumsmuster akzeptiert per <code>fullmatch</code> den Text <code>31.02.2026</code>. Was ist die richtige Diagnose?',
+      options: [
+        '<code>fullmatch</code> ist für Daten ungeeignet',
+        'Die Regex kann nur suchen, nicht validieren',
+        'Das Format kann korrekt sein, obwohl das Kalenderdatum semantisch ungültig ist',
+        'Der Punkt hätte unmaskiert bleiben müssen'
+      ],
+      correct: 2,
+      why: 'Regex eignet sich für die Struktur „Tag.Monat.Jahr“. Ob diese Kombination existiert, sollte anschließend zum Beispiel <code>datetime.strptime()</code> prüfen.'
+    },
+    {
+      id: 'q50', level: 3, q: 'Was liefert dieser Aufruf?',
+      code: '[m.span() for m in re.finditer(r"\\d+", "A12 B345")]',
+      options: ['[(0, 2), (4, 7)]', "['12', '345']", '[(1, 2), (5, 7)]', '[(1, 3), (5, 8)]'],
+      correct: 3,
+      why: '<code>span()</code> liefert halb offene Bereiche <code>(start, ende)</code>. „12“ belegt Index 1 bis vor 3, „345“ Index 5 bis vor 8.'
+    },
+    {
+      id: 'q51', level: 3, q: 'Ein Suchbegriff kommt aus einem Textfeld und soll <b>wörtlich</b> gefunden werden. Welche Variante ist passend?',
+      options: [
+        '<code>re.search(suchbegriff, text)</code>',
+        '<code>re.search(r"\\b" + suchbegriff + r"\\b", text)</code>',
+        '<code>re.search(re.escape(suchbegriff), text)</code>',
+        '<code>re.search(str(suchbegriff), text, re.X)</code>'
+      ],
+      correct: 2,
+      why: '<code>re.escape()</code> nimmt Metazeichen aus der Eingabe ihre Sonderbedeutung. Wortgrenzen allein würden etwa einen Punkt oder ein Plus nicht sicher machen.'
+    },
+
+    /* ---------- Neue Fragen · Stufe 4 ---------- */
+    {
+      id: 'q52', level: 4, q: 'Was passiert bei diesem Aufruf?',
+      code: 're.compile(r"[A-Z+")',
+      options: [
+        'Das Muster findet eine öffnende eckige Klammer',
+        'Die Funktion gibt None zurück',
+        '<code>re.error</code> wird ausgelöst, weil die Zeichenklasse nicht geschlossen ist',
+        'Python ergänzt die fehlende Klammer automatisch'
+      ],
+      correct: 2,
+      why: 'Die Python-Zeichenkette selbst ist gültig, aber das Regex-Muster nicht. Der Fehler entsteht beim Kompilieren und kann mit <code>except re.error</code> abgefangen werden.'
+    },
+    {
+      id: 'q53', level: 4, q: 'Welcher Ausschnitt matcht im Modus <code>re.X</code> ein wörtliches <code>#</code> gefolgt von Ziffern?',
+      options: ['<code>#\\d+</code>', '<code>[#]\\d+</code>', '<code>[#\\d+]</code>', '<code>\\d+#</code>'],
+      correct: 1,
+      why: 'Außerhalb einer Zeichenklasse startet <code>#</code> im Verbose-Modus einen Kommentar. In <code>[#]</code> bleibt es wörtlich; danach matcht <code>\\d+</code> die Ziffern.'
+    },
+    {
+      id: 'q54', level: 4, q: 'Welches Muster findet ein doppeltes Anführungszeichen-Feld am eindeutigsten, ohne über dessen Ende oder eine neue Zeile zu laufen?',
+      options: ['<code>".*"</code>', '<code>".*?"</code>', '<code>"[^"\\n]*"</code>', '<code>"\\w*"</code>'],
+      correct: 2,
+      why: 'Die negierte Klasse beschreibt die echte Grenze direkt: weder <code>"</code> noch Zeilenumbruch sind im Inhalt erlaubt. Lazy ist oft kürzer als gierig, bleibt aber weniger strukturell.',
+      demo: { pattern: '"[^"\\n]*"', text: '"eins", "zwei drei", "vier"' }
+    },
+    {
+      id: 'q55', level: 4, q: 'Welche Aussage zu <code>re.compile()</code> und Performance ist korrekt?',
+      options: [
+        'Es macht exponentielles Backtracking automatisch linear',
+        'Ohne re.compile wird ein Muster bei jedem Aufruf syntaktisch abgelehnt',
+        'Python puffert niemals zuvor verwendete Muster',
+        'Es erzeugt ein gut wiederverwendbares Pattern-Objekt; die eigentliche Musterqualität muss man trotzdem prüfen und messen'
+      ],
+      correct: 3,
+      why: 'Kompilieren ist gut für Wiederverwendung und Lesbarkeit. Python besitzt zusätzlich einen Cache für zuletzt verwendete Muster; gegen algorithmisch teures Backtracking hilft beides nicht.'
+    },
+    {
+      id: 'q56', level: 4, q: 'Welche Aussage über <code>re.A</code> / <code>re.ASCII</code> stimmt bei einem <code>str</code>-Muster?',
+      options: [
+        'Das Flag wandelt den Eingabetext in ASCII um',
+        'Es beschränkt unter anderem \\w, \\d, \\s und zugehörige Grenzen auf ASCII; wörtliche Unicode-Zeichen bleiben wörtlich',
+        'Es entfernt alle Nicht-ASCII-Zeichen vor der Suche',
+        'Es wirkt ausschließlich zusammen mit re.I'
+      ],
+      correct: 1,
+      why: '<code>re.A</code> ändert die Bedeutung bestimmter Kurzformen und Wortgrenzen. Der Text selbst wird weder umgewandelt noch bereinigt; ein ausdrücklich geschriebenes <code>ä</code> kann weiter matchen.'
+    },
+
+    /* ---------- Neue Fragen · Stufe 5 ---------- */
+    {
+      id: 'q57', level: 5, q: 'Eine Regex verarbeitet lange, fremde Eingaben. Welche Schutzmaßnahme ist mit Pythons Standardmodul <code>re</code> sinnvoll?',
+      options: [
+        'Bei jedem Aufruf <code>timeout=1</code> an re.search übergeben',
+        'Jeden Quantifizierer mit <code>?</code> lazy machen',
+        'Eingabelänge begrenzen, mehrdeutige Muster vermeiden und harte Grenzen bei Bedarf außerhalb des Aufrufs isolieren',
+        '<code>re.A</code> aktivieren, denn das garantiert lineare Laufzeit'
+      ],
+      correct: 2,
+      why: 'Das Standardmodul bietet keinen Timeout-Parameter pro Regex-Aufruf. Lazy Quantifizierer und ASCII-Modus garantieren ebenfalls keine Laufzeit; entscheidend sind Musterstruktur und kontrollierte Eingaben.'
+    },
+    {
+      id: 'q58', level: 5, q: 'Welches Muster liest ein durch Semikolon beendetes Feld am eindeutigsten und vermeidet unnötiges Zurücklaufen über frühere Trennzeichen?',
+      options: ['<code>.*;</code>', '<code>.*?;</code>', '<code>[^;\\n]*;</code>', '<code>(?:.*)*;</code>'],
+      correct: 2,
+      why: '<code>[^;\\n]*</code> kann strukturell weder ein Semikolon noch einen Zeilenumbruch verschlucken. Das ist eindeutiger als gieriges oder lazy Punkt-Stern und vermeidet die verschachtelte Wiederholung der letzten Option.'
+    },
+    {
+      id: 'q59', level: 5, q: 'Für welche Aufgabe ist Regex normalerweise <b>nicht</b> das passende Hauptwerkzeug?',
+      options: [
+        'Einfache Bestellnummern in einem Log finden',
+        'Mehrfachen Leerraum vereinheitlichen',
+        'Verschachteltes JSON zuverlässig einlesen',
+        'Alle vierstelligen ASCII-Zahlen extrahieren'
+      ],
+      correct: 2,
+      why: 'JSON besitzt verschachtelte Struktur, Escape-Regeln und Datentypen. <code>json.loads()</code> bildet diese Grammatik zuverlässig ab; Regex bleibt für einfache Textmuster die bessere Wahl.'
+    },
+    {
+      id: 'q60', level: 5, q: 'Eine Kennung <code>ORD-2026-0042</code> soll zerlegt werden; zusätzlich muss das Jahr in einem erlaubten Bereich liegen. Welcher Ablauf ist robust?',
+      options: [
+        'Mit einer immer längeren Regex auch die komplette Geschäftslogik ausdrücken',
+        'Mit search irgendeinen passenden Teil nehmen und den Rest ignorieren',
+        'Bewusst normalisieren, per fullmatch benannte Gruppen extrahieren, in Zahlen umwandeln und den Bereich in Python prüfen',
+        'An jedem Nicht-Wortzeichen splitten und unabhängig von der Teilezahl fortfahren'
+      ],
+      correct: 2,
+      why: 'Regex übernimmt Format und Zerlegung. Typumwandlung und fachliche Bereiche bleiben verständlicher, testbarer Python-Code — eine saubere Trennung der Verantwortlichkeiten.'
     }
   ];
 })(window);

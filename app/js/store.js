@@ -10,14 +10,15 @@
     theme: null,          // null = Systemeinstellung
     solved: {},           // Aufgaben-ID  -> true
     readLessons: {},      // Lektions-ID  -> true
-    quizDone: {},         // Quiz-ID      -> true|false (richtig/falsch)
+    quizDone: {},         // Quiz-ID      -> true|false (jemals gemeistert)
+    quizLast: {},         // Quiz-ID      -> true|false (letzte Antwort)
     lastView: 'learn',
     lastLesson: null,
     lastLevel: 1,
     playground: null
   };
 
-  var VIEWS = ['learn', 'ref', 'play', 'train', 'quiz'];
+  var VIEWS = ['start', 'learn', 'ref', 'play', 'train', 'quiz'];
   var FUNCTIONS = ['findall', 'finditer', 'search', 'match', 'fullmatch', 'sub', 'split'];
   var MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 
@@ -26,6 +27,7 @@
     out.solved = Object.create(null);
     out.readLessons = Object.create(null);
     out.quizDone = Object.create(null);
+    out.quizLast = Object.create(null);
     return out;
   }
 
@@ -118,6 +120,8 @@
     if (value.solved !== undefined) out.solved = booleanMap(value.solved, 'solved', exerciseIds, strict);
     if (value.readLessons !== undefined) out.readLessons = booleanMap(value.readLessons, 'readLessons', lessonIds, strict);
     if (value.quizDone !== undefined) out.quizDone = booleanMap(value.quizDone, 'quizDone', quizIds, strict);
+    if (value.quizLast !== undefined) out.quizLast = booleanMap(value.quizLast, 'quizLast', quizIds, strict);
+    else Object.keys(out.quizDone).forEach(function (id) { out.quizLast[id] = out.quizDone[id]; });
 
     if (value.lastView === undefined || VIEWS.indexOf(value.lastView) !== -1) out.lastView = value.lastView || out.lastView;
     else fail(strict, 'lastView enthält keine bekannte Ansicht.');
@@ -170,9 +174,13 @@
     isRead: function (id) { return owns(data.readLessons, id) && data.readLessons[id] === true; },
     markRead: function (id) { data.readLessons[id] = true; save(); },
 
-    quizAnswer: function (id, correct) { data.quizDone[id] = !!correct; save(); },
-    quizResult: function (id) { return owns(data.quizDone, id) ? data.quizDone[id] : undefined; },
-    isQuizAttempted: function (id) { return owns(data.quizDone, id); },
+    quizAnswer: function (id, correct) {
+      data.quizLast[id] = !!correct;
+      if (correct || !owns(data.quizDone, id)) data.quizDone[id] = !!correct;
+      save();
+    },
+    quizResult: function (id) { return owns(data.quizLast, id) ? data.quizLast[id] : undefined; },
+    isQuizAttempted: function (id) { return owns(data.quizLast, id); },
 
     exportJSON: function () {
       return JSON.stringify(data, null, 2);
@@ -199,11 +207,19 @@
       var leDone = RT.lessons.filter(function (l) { return owns(data.readLessons, l.id) && data.readLessons[l.id] === true; }).length;
       var quTotal = RT.quiz.length;
       var quDone = RT.quiz.filter(function (q) { return owns(data.quizDone, q.id) && data.quizDone[q.id] === true; }).length;
-      var quAttempted = RT.quiz.filter(function (q) { return owns(data.quizDone, q.id); }).length;
-      var total = exTotal + leTotal + quTotal;
-      var done = exDone + leDone + quDone;
+      var quAttempted = RT.quiz.filter(function (q) { return owns(data.quizLast, q.id); }).length;
+      /* Der Ring beschreibt einen stabilen Kernlernplan. Neue Bonuslektionen
+         und neue Zufallsfragen lassen bestehenden Fortschritt so nicht sinken. */
+      var coreLessons = RT.lessons.slice(0, Math.min(10, leTotal));
+      var coreExercises = RT.exercises.slice(0, Math.min(53, exTotal));
+      var coreLessonsDone = coreLessons.filter(function (l) { return owns(data.readLessons, l.id) && data.readLessons[l.id] === true; }).length;
+      var coreExercisesDone = coreExercises.filter(function (e) { return owns(data.solved, e.id) && data.solved[e.id] === true; }).length;
+      var quizGoal = Math.min(20, quTotal);
+      var learnPart = coreLessons.length ? coreLessonsDone / coreLessons.length : 0;
+      var exercisePart = coreExercises.length ? coreExercisesDone / coreExercises.length : 0;
+      var quizPart = quizGoal ? Math.min(quDone, quizGoal) / quizGoal : 0;
       return {
-        pct: total ? Math.round(done / total * 100) : 0,
+        pct: Math.round((learnPart * .35 + exercisePart * .50 + quizPart * .15) * 100),
         exDone: exDone, exTotal: exTotal,
         leDone: leDone, leTotal: leTotal,
         quDone: quDone, quTotal: quTotal,

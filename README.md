@@ -18,9 +18,9 @@ und geh direkt ins Training.
 
 ## Was drin ist
 
-**Lernpfad** — Zehn Kapitel vom ersten Muster bis zur Textanalyse. Jedes Beispiel
+**Lernpfad** — 14 Kapitel vom ersten Muster bis zu Validierung, Debugging und Textanalyse. Jedes Beispiel
 ist ein kleines Eingabefeld: Muster ändern, Text ändern, sofort sehen, was passiert.
-Etwa 72 Minuten von vorn bis hinten.
+Etwa 109 Minuten von vorn bis hinten.
 
 **Nachschlagen** — 119 Einträge, durchsuchbar. Du kannst nach dem Zeichen suchen
 (`\b`), nach dem Begriff („Wortgrenze") oder danach, was du erreichen willst
@@ -39,8 +39,8 @@ gegen **mehrere** Texte geprüft, nicht nur gegen das Beispiel — ein Muster, d
 nur zufällig passt, fällt durch. Wenn du hängst, gibt es gestufte Tipps und zum
 Schluss die Lösung.
 
-**Quiz** — 36 Multiple-Choice-Fragen im Klausurstil: „Was gibt dieser Aufruf
-zurück?" Jede Antwort wird erklärt, richtig oder falsch.
+**Quiz** — 60 Multiple-Choice-Fragen im Klausurstil, standardmäßig als zufällige
+10er-Runde. Jede Antwort wird erklärt, richtig oder falsch.
 
 Dein Fortschritt wird lokal im Browser gespeichert. Der Export kopiert ihn als
 JSON in die Zwischenablage; über den Import kannst du dieses JSON wieder
@@ -52,7 +52,7 @@ Wenn du bei null startest: **Lernpfad** Kapitel 1–4, dann **Training** Stufe 1
 Danach wechselst du am besten hin und her — ein Kapitel lesen, die passende Stufe
 üben. Das **Quiz** eignet sich zum Wiederholen kurz vor einer Prüfung.
 
-Tastatur: `1`–`5` springen zwischen den Bereichen, `⌘K` / `Strg+K` öffnet die Suche.
+Tastatur: `1`–`6` springen zwischen den Bereichen, `⌘K` / `Strg+K` öffnet die Suche.
 
 ## Python statt JavaScript
 

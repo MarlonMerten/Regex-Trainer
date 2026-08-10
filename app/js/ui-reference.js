@@ -11,6 +11,7 @@
   var openIds = {};
   var pendingRoute = null;
   var routedKey = null;
+  var showAll = false;
   var routeLookup = {};
   var routesByKey = {};
 
@@ -18,6 +19,7 @@
     activeCat = 'all';
     query = '';
     routedKey = null;
+    showAll = false;
     openIds = {};
     container.appendChild(el('div', { class: 'page-head' }, [
       el('h1', { text: 'Nachschlagen' }),
@@ -31,6 +33,7 @@
     });
     searchInput.addEventListener('input', function () {
       routedKey = null;
+      showAll = false;
       RT.setRoute('ref', null);
       query = searchInput.value.trim().toLowerCase();
       render();
@@ -113,8 +116,10 @@
     if (!sub) {
       routedKey = null;
       openIds = {};
+      showAll = false;
       activeCat = 'all';
       query = '';
+      showAll = false;
       if (searchInput) searchInput.value = '';
       renderSide();
       render();
@@ -164,6 +169,7 @@
       b.addEventListener('click', function () {
         activeCat = cat.id;
         routedKey = null;
+        showAll = false;
         RT.setRoute('ref', null);
         renderSide();
         render();
@@ -186,6 +192,8 @@
 
   function render() {
     var hits = RT.reference.filter(matches);
+    var initialOverview = !query && activeCat === 'all' && !routedKey && !showAll;
+    var visibleHits = initialOverview ? hits.slice(0, 24) : hits;
     listBox.innerHTML = '';
 
     if (!hits.length) {
@@ -198,10 +206,18 @@
     }
 
     var frag = document.createDocumentFragment();
-    hits.forEach(function (entry, i) {
+    visibleHits.forEach(function (entry, i) {
       frag.appendChild(renderItem(entry, i));
     });
     listBox.appendChild(frag);
+    if (initialOverview && hits.length > visibleHits.length) {
+      var more = el('button', { class: 'btn ref-more', type: 'button', text: 'Alle ' + hits.length + ' Einträge anzeigen' });
+      more.addEventListener('click', function () { showAll = true; render(); });
+      listBox.appendChild(el('div', { class: 'ref-more-wrap' }, [
+        el('p', { text: 'Tipp: Mit der Suche findest du Syntax, Begriffe und fertige Rezepte am schnellsten.' }),
+        more
+      ]));
+    }
     listBox.classList.add('stagger');
     setTimeout(function () { listBox.classList.remove('stagger'); }, 700);
   }
@@ -224,7 +240,8 @@
     }, [
       el('span', { class: 'ref-sym', text: entry.sym }),
       el('span', { class: 'ref-title', text: entry.title }),
-      el('span', { class: 'ref-sub', text: catLabel })
+      el('span', { class: 'ref-sub', text: catLabel }),
+      el('span', { class: 'ref-chevron', 'aria-hidden': 'true', text: '⌄' })
     ]);
 
     var item = el('div', { class: 'ref-item' + (isOpen ? ' open' : '') }, head);

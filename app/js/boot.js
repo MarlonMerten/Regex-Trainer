@@ -6,12 +6,14 @@
   var RT = global.RT, U = RT.ui, el = U.el;
 
   var VIEWS = [
+    { id: 'start', label: 'Start' },
     { id: 'learn', label: 'Lernen' },
-    { id: 'ref',   label: 'Nachschlagen' },
+    { id: 'train', label: 'Üben' },
+    { id: 'quiz',  label: 'Quiz' },
     { id: 'play',  label: 'Playground' },
-    { id: 'train', label: 'Training' },
-    { id: 'quiz',  label: 'Quiz' }
+    { id: 'ref',   label: 'Lexikon' }
   ];
+  var NAV_ITEMS = VIEWS.filter(function (view) { return view.id !== 'start'; });
 
   var built = {};
   var currentView = null;
@@ -62,14 +64,16 @@
     var requestedSub = sub || null;
     currentView = id;
     currentSub = requestedSub;
-    RT.store.set('lastView', id);
+    if (id !== 'start') RT.store.set('lastView', id);
 
     VIEWS.forEach(function (v) {
       var section = document.getElementById('view-' + v.id);
       var on = v.id === id;
       section.classList.toggle('on', on);
-      navBtns[v.id].classList.toggle('on', on);
-      navBtns[v.id].setAttribute('aria-current', on ? 'page' : 'false');
+      if (navBtns[v.id]) {
+        navBtns[v.id].classList.toggle('on', on);
+        navBtns[v.id].setAttribute('aria-current', on ? 'page' : 'false');
+      }
     });
 
     routingDepth++;
@@ -114,10 +118,13 @@
       }
       parsed = { view: null, sub: null };
     }
-    var view = parsed.view || RT.store.get('lastView') || 'learn';
+    /* Ein Aufruf ohne Deep Link landet immer auf dem übersichtlichen Start.
+       Der letzte Bereich bleibt gespeichert und wird dort als Fortsetzen-Ziel
+       angeboten, statt neue Gäste ungeführt mitten in einer Aufgabe abzusetzen. */
+    var view = parsed.view || 'start';
     if (!VIEWS.some(function (v) { return v.id === view; })) {
-      view = 'learn';
-      parsed.sub = RT.store.get('lastLesson') || (RT.lessons[0] && RT.lessons[0].id) || null;
+      view = 'start';
+      parsed.sub = null;
     }
     /* Playground besitzt keine Unterrouten. Fremde Fragmente werden nicht
        als scheinbar gültige URL konserviert. Andere Ansichten kanonisieren
@@ -165,7 +172,10 @@
   function movePill() {
     if (!navPill || !currentView) return;
     var btn = navBtns[currentView];
-    if (!btn || !btn.offsetParent) return;
+    if (!btn || !btn.offsetParent) {
+      navPill.classList.remove('ready');
+      return;
+    }
     navPill.style.width = btn.offsetWidth + 'px';
     navPill.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
     navPill.classList.add('ready');
@@ -212,7 +222,7 @@
     num.textContent = o.pct;
     var host = document.getElementById('ring');
     if (host) {
-      var label = 'Fortschritt ' + o.pct + ' Prozent: ' +
+      var label = 'Fortschritt im Kernlernplan ' + o.pct + ' Prozent. Insgesamt: ' +
         o.leDone + '/' + o.leTotal + ' Kapitel, ' +
         o.exDone + '/' + o.exTotal + ' Aufgaben, ' +
         o.quDone + '/' + o.quTotal + ' Quiz richtig (' + o.quAttempted + ' bearbeitet)';
@@ -275,7 +285,7 @@
         el('section', { class: 'help-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'help-title' }, [
           el('h2', { id: 'help-title', text: 'Tastaturkürzel' }),
           el('dl', { class: 'help-list' }, [
-            el('dt', { text: '1 – 5' }), el('dd', { text: 'Zwischen Bereichen wechseln' }),
+            el('dt', { text: '1 – 6' }), el('dd', { text: 'Zwischen Bereichen wechseln' }),
             el('dt', { text: U.modKeyLabel() + ' + K' }), el('dd', { text: 'Nachschlagen öffnen und Suche fokussieren' }),
             el('dt', { text: '?' }), el('dd', { text: 'Diese Hilfe ein-/ausblenden' }),
             el('dt', { text: 'Esc' }), el('dd', { text: 'Eingabefeld verlassen oder Hilfe schließen' })
@@ -350,15 +360,17 @@
     var nav = document.getElementById('nav');
     navPill = el('span', { class: 'nav-pill', 'aria-hidden': 'true' });
     nav.appendChild(navPill);
-    VIEWS.forEach(function (v) {
+    NAV_ITEMS.forEach(function (v) {
       var b = el('button', {
         type: 'button', class: 'nav-btn', text: v.label,
-        'aria-current': 'false'
+        'aria-current': 'false', 'data-view': v.id
       });
       b.addEventListener('click', function () { go(v.id); });
       navBtns[v.id] = b;
       nav.appendChild(b);
     });
+
+    document.getElementById('home-btn').addEventListener('click', function () { go('start'); });
 
     applyTheme(RT.store.get('theme'));
     document.getElementById('theme-btn').addEventListener('click', toggleTheme);
@@ -369,9 +381,19 @@
     if (themeQuery.addEventListener) themeQuery.addEventListener('change', onSystemTheme);
     else if (themeQuery.addListener) themeQuery.addListener(onSystemTheme);
 
-    document.getElementById('export-btn').addEventListener('click', exportProgress);
-    document.getElementById('import-btn').addEventListener('click', importProgress);
-    document.getElementById('help-btn').addEventListener('click', function () { toggleHelp(); });
+    function closeMoreMenu() {
+      var menu = document.getElementById('more-menu');
+      if (menu) menu.open = false;
+    }
+    document.getElementById('menu-play-btn').addEventListener('click', function () { closeMoreMenu(); go('play'); });
+    document.getElementById('export-btn').addEventListener('click', function () { closeMoreMenu(); exportProgress(); });
+    document.getElementById('import-btn').addEventListener('click', function () { closeMoreMenu(); importProgress(); });
+    document.getElementById('help-btn').addEventListener('click', function () {
+      var summary = document.querySelector('#more-menu > summary');
+      closeMoreMenu();
+      if (summary) summary.focus();
+      toggleHelp();
+    });
     document.getElementById('help-btn').setAttribute('aria-expanded', 'false');
 
     var skip = document.querySelector('.skip-link');
@@ -428,11 +450,12 @@
     });
 
     document.getElementById('reset-btn').addEventListener('click', function () {
+      closeMoreMenu();
       if (!confirm('Gelöste Aufgaben, gelesene Kapitel und Quiz-Ergebnisse verwerfen?')) return;
       RT.store.reset();
       clearBuiltViews();
       applyTheme(null);
-      go('learn');
+      go('start');
       refreshProgress();
       U.toast('Fortschritt zurückgesetzt');
     });

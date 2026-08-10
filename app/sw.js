@@ -1,9 +1,10 @@
 /* Regex Trainer — Offline-Cache */
-var CACHE = 'regex-trainer-v4';
+var CACHE = 'regex-trainer-v8';
 var ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './og-preview.png',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -17,6 +18,7 @@ var ASSETS = [
   './js/data-exercises.js',
   './js/data-quiz.js',
   './js/store.js',
+  './js/ui-start.js',
   './js/ui-lessons.js',
   './js/ui-reference.js',
   './js/ui-playground.js',

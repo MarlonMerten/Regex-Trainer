@@ -80,12 +80,12 @@ test('alle Lektionen bleiben bei 320 px ohne Seiten-Overflow bedienbar', async (
   await page.goto('/#learn');
 
   const chapterCount = await page.evaluate(() => RT.lessons.length);
-  const chapters = page.locator('.learn-nav button');
-  await expect(chapters).toHaveCount(chapterCount);
+  const chapterSelect = page.getByLabel('Kapitel auswählen');
+  await expect(chapterSelect.locator('option')).toHaveCount(chapterCount);
 
   for (let index = 0; index < chapterCount; index++) {
     const expected = await page.evaluate(i => RT.lessons[i].title, index);
-    await chapters.nth(index).click();
+    await chapterSelect.selectOption(String(index));
     await expect(page.locator('.lesson h2')).toHaveText(expected);
     const metrics = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
@@ -99,3 +99,23 @@ test('alle Lektionen bleiben bei 320 px ohne Seiten-Overflow bedienbar', async (
   expect(errors).toEqual([]);
 });
 
+test('mobiles Training startet oben, ohne Tastatur-Sprung, und Controls sind touchfreundlich', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#train/random');
+  await expect(page.getByRole('heading', { name: 'Üben', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  const metrics = await page.evaluate(() => {
+    const input = document.querySelector('#view-train input[aria-label="Dein regulärer Ausdruck"]');
+    const controls = [...document.querySelectorAll('#view-train .ex-dot, #view-train .flag')];
+    return {
+      activeTag: document.activeElement && document.activeElement.tagName,
+      inputFont: parseFloat(getComputedStyle(input).fontSize),
+      smallestControl: Math.min(...controls.map(node => node.getBoundingClientRect().height)),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+    };
+  });
+  expect(metrics.activeTag).not.toBe('INPUT');
+  expect(metrics.inputFont).toBeGreaterThanOrEqual(16);
+  expect(metrics.smallestControl).toBeGreaterThanOrEqual(44);
+  expect(metrics.overflow).toBe(false);
+});

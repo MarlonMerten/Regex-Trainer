@@ -12,9 +12,10 @@
     root = container;
     navBox = el('nav', { class: 'learn-nav', 'aria-label': 'Kapitel' });
     body = el('article', { class: 'lesson' });
+    var totalMinutes = RT.lessons.reduce(function (sum, lesson) { return sum + lesson.minutes; }, 0);
     root.appendChild(el('div', { class: 'page-head' }, [
-      el('h1', { text: 'Lernpfad' }),
-      el('p', { text: 'Zehn Kapitel vom ersten Muster bis zur Textanalyse. Jedes Beispiel lässt sich direkt bearbeiten — verändere die Muster und schau, was passiert.' })
+      el('h1', { text: 'Lernen' }),
+      el('p', { text: RT.lessons.length + ' kurze Kapitel (' + totalMinutes + ' Minuten) führen dich Schritt für Schritt von den Grundlagen zur sicheren Anwendung. Alle Beispiele sind direkt editierbar.' })
     ]));
     root.appendChild(el('div', { class: 'learn-grid' }, [navBox, body]));
     renderNav();
@@ -52,7 +53,22 @@
       b.addEventListener('click', function () { open(i); });
       ol.appendChild(el('li', null, b));
     });
+    var select = el('select', { class: 'select lesson-select', 'aria-label': 'Kapitel auswählen' },
+      RT.lessons.map(function (lesson, i) {
+        return el('option', {
+          value: String(i), selected: i === current ? '' : null,
+          text: (i + 1) + '. ' + lesson.title + (RT.store.isRead(lesson.id) ? ' ✓' : '')
+        });
+      })
+    );
+    select.value = String(current);
+    select.addEventListener('change', function () { open(Number(select.value)); });
+    var done = RT.lessons.filter(function (lesson) { return RT.store.isRead(lesson.id); }).length;
     navBox.innerHTML = '';
+    navBox.appendChild(el('div', { class: 'learn-nav-head' }, [
+      el('span', { text: 'Kapitel' }), el('strong', { text: done + '/' + RT.lessons.length })
+    ]));
+    navBox.appendChild(select);
     navBox.appendChild(ol);
   }
 
@@ -87,7 +103,9 @@
     body.appendChild(el('header', { class: 'lesson-head' }, [
       el('span', { class: 'tag', text: 'Kapitel ' + (current + 1) + ' · ' + l.minutes + ' Min' }),
       el('h2', { text: l.title }),
-      el('p', { text: l.sub })
+      el('p', { text: l.sub }),
+      el('div', { class: 'lesson-progress', role: 'progressbar', 'aria-label': 'Fortschritt im Lernpfad', 'aria-valuemin': '0', 'aria-valuemax': String(RT.lessons.length), 'aria-valuenow': String(current + 1) },
+        el('i', { style: 'width:' + Math.round((current + 1) / RT.lessons.length * 100) + '%', 'aria-hidden': 'true' }))
     ]));
 
     l.blocks.forEach(function (b) {

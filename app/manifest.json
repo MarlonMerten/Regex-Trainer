@@ -1,13 +1,13 @@
 {
   "name": "Regex Trainer",
   "short_name": "Regex",
-  "description": "Reguläre Ausdrücke für Python 3.14 lernen und üben",
+  "description": "Regex ohne Anmeldung lernen, zufällig üben und direkt verstehen",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0a0e17",
-  "theme_color": "#6d8cff",
+  "background_color": "#0b101a",
+  "theme_color": "#4d63c8",
   "lang": "de-DE",
   "prefer_related_applications": false,
   "icons": [

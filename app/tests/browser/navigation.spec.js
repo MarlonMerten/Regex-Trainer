@@ -19,21 +19,22 @@ test('View- und Kapitelwechsel lassen sich innerhalb der App zurücknavigieren',
   const errors = await captureRuntimeErrors(page);
   await page.goto('/');
   const initialHash = await page.evaluate(() => location.hash);
-  expect(initialHash).toMatch(/^#learn\//);
+  expect(initialHash).toBe('#start');
 
   const nav = page.locator('#nav');
   await nav.getByRole('button', { name: 'Playground', exact: true }).click();
   await expect(page).toHaveURL(/#play$/);
-  await nav.getByRole('button', { name: 'Training', exact: true }).click();
+  await nav.getByRole('button', { name: 'Üben', exact: true }).click();
   await expect(page).toHaveURL(/#train\/l1-01$/);
 
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'Playground', exact: true })).toBeVisible();
   await expect(page).toHaveURL(/#play$/);
   await page.goBack();
-  await expect(page.getByRole('heading', { name: 'Lernpfad', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Regex verstehen. Nicht nur auswendig lernen.', exact: true })).toBeVisible();
   expect(await page.evaluate(() => location.hash)).toBe(initialHash);
 
+  await nav.getByRole('button', { name: 'Lernen', exact: true }).click();
   const chapters = page.locator('.learn-nav button');
   await chapters.nth(1).click();
   const secondHash = await page.evaluate(() => location.hash);
@@ -68,8 +69,8 @@ test('ungültige Views und Unterrouten werden im aktuellen Eintrag kanonisiert',
     ['/#learn/toString', /^#learn\/(?!toString$).+/],
     ['/#train/constructor', /^#train\/l\d-\d+$/],
     ['/#play/nicht-vorhanden', /^#play$/],
-    ['/#quiz/__proto__', /^#quiz$/],
-    ['/#nicht-vorhanden/toString', /^#learn\/.+/]
+    ['/#quiz/__proto__', /^#quiz\/quick$/],
+    ['/#nicht-vorhanden/toString', /^#start$/]
   ];
 
   for (const [url, canonicalHash] of cases) {

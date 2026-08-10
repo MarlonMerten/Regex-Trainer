@@ -127,7 +127,7 @@ test('PWA-Update kann vertagt und später geladen werden, ohne fremde Caches zu 
     ]);
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     await expect.poll(() => workerVersion(page, 'controller')).toBe('b');
-    await expect(page.getByRole('heading', { name: 'Lernpfad', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Regex verstehen. Nicht nur auswendig lernen.', exact: true })).toBeVisible();
 
     const cachesAfter = await page.evaluate(async () => {
       const keys = await caches.keys();

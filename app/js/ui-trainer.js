@@ -11,6 +11,8 @@
   var caseNodes = [];
   var pendingRoute = null;
   var evaluationSeq = 0;
+  var randomMode = false;
+  var lastRandomId = null;
 
   /* ---- Soll-Ergebnisse einmalig aus der Musterlösung berechnen ---- */
   function prepare() {
@@ -80,9 +82,14 @@
 
   function build(container) {
     prepare();
-    container.appendChild(el('div', { class: 'page-head' }, [
-      el('h1', { text: 'Training' }),
-      el('p', { text: 'Jede Aufgabe wird gegen mehrere Texte geprüft — der zweite ist die Gegenprobe. Ein Muster, das nur zufällig passt, fällt hier durch. Rückmeldung kommt sofort beim Tippen.' })
+    var randomBtn = el('button', { class: 'btn random-train-btn', type: 'button', text: '↝ Zufällige Aufgabe' });
+    randomBtn.addEventListener('click', openRandom);
+    container.appendChild(el('div', { class: 'page-head page-head-actions' }, [
+      el('div', null, [
+        el('h1', { text: 'Üben' }),
+        el('p', { text: 'Schreibe das Muster selbst. Wir prüfen es sofort gegen mehrere Texte und zeigen dir genau, was noch nicht passt.' })
+      ]),
+      randomBtn
     ]));
 
     lvBox = el('div', { class: 'lv-grid' });
@@ -98,7 +105,7 @@
       openById(pendingRoute);
       pendingRoute = null;
     } else {
-      openLevel(level, true);
+      openLevel(level, false);
     }
   }
 
@@ -129,6 +136,11 @@
       pendingRoute = sub;
       return;
     }
+    if (sub === 'random') {
+      openRandom();
+      return;
+    }
+    randomMode = false;
     if (!openById(sub)) {
       var list = exercisesOf(level);
       if (list[idx]) RT.setRoute('train', list[idx].id);
@@ -164,7 +176,28 @@
     return RT.exercises.filter(function (e) { return e.level === lv; });
   }
 
+  function randomFrom(list) {
+    if (!list.length) return null;
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function openRandom() {
+    var sameLevel = exercisesOf(level).filter(function (exercise) {
+      return !RT.store.isSolved(exercise.id) && exercise.id !== lastRandomId;
+    });
+    var allOpen = RT.exercises.filter(function (exercise) {
+      return !RT.store.isSolved(exercise.id) && exercise.id !== lastRandomId;
+    });
+    var fallback = RT.exercises.filter(function (exercise) { return exercise.id !== lastRandomId; });
+    var chosen = randomFrom(sameLevel) || randomFrom(allOpen) || randomFrom(fallback) || RT.exercises[0];
+    if (!chosen) return;
+    randomMode = true;
+    lastRandomId = chosen.id;
+    openById(chosen.id);
+  }
+
   function openLevel(lv, keepIndex) {
+    randomMode = false;
     level = lv;
     RT.store.set('lastLevel', lv);
     if (!keepIndex) idx = 0;
@@ -190,7 +223,7 @@
         'aria-label': 'Aufgabe ' + (i + 1) + ': ' + ex.title,
         'aria-current': i === idx ? 'step' : 'false'
       });
-      d.addEventListener('click', function () { openExercise(i); });
+      d.addEventListener('click', function () { randomMode = false; openExercise(i); });
       dotBox.appendChild(d);
     });
   }
@@ -221,6 +254,7 @@
 
     var head = el('div', { class: 'ex-head' }, [
       el('span', { class: 'tag', text: 'Aufgabe ' + (idx + 1) + ' / ' + exercisesOf(level).length }),
+      randomMode ? el('span', { class: 'tag tag-random', text: 'Zufallsmix' }) : null,
       el('h2', { class: 'ex-title', text: ex.title }),
       solved ? el('span', { class: 'tag tag-ok', text: 'gelöst' }) : null
     ]);
@@ -235,7 +269,7 @@
       ? el('span', { class: 'hint-r', text: 're.sub(muster, r"' + (ex.repl === '' ? '' : ex.repl) + '", text)' })
       : ex.fn === 'split'
         ? el('span', { class: 'hint-r', text: 're.split(muster, text)' })
-        : el('span', { class: 'hint-r', text: 're.findall(muster, text)' });
+        : el('span', { class: 'hint-r', text: 're.' + (ex.fn || 'findall') + '(muster, text)' });
 
     var inputBlock = el('div', { class: 'pg-block' }, [
       el('div', { class: 'field-head' }, [el('span', { class: 'label', text: 'Dein Muster' }), fnHint]),
@@ -305,10 +339,10 @@
     });
 
     var prevBtn = el('button', { class: 'btn sm ghost', type: 'button', html: '&larr; Vorherige' });
-    var nextBtn = el('button', { class: 'btn sm ghost', type: 'button', html: 'Nächste &rarr;' });
+    var nextBtn = el('button', { class: 'btn sm ghost', type: 'button', html: randomMode ? 'Neue Zufallsaufgabe &rarr;' : 'Nächste &rarr;' });
     prevBtn.addEventListener('click', function () { openExercise(idx - 1); });
     nextBtn.addEventListener('click', function () { goNext(); });
-    prevBtn.disabled = idx === 0;
+    prevBtn.disabled = randomMode || idx === 0;
 
     var actions = el('div', { class: 'pg-row' }, [
       hintBtn, solBtn, pgBtn,
@@ -321,10 +355,13 @@
 
     cardBox._verdict = verdictBox;
     paintEvaluation(ex, currentSnapshot(), null);
-    setTimeout(function () { rx.input.focus(); }, 60);
+    if (global.innerWidth > 780 && global.matchMedia && global.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      setTimeout(function () { if (rx.input.isConnected) rx.input.focus({ preventScroll: true }); }, 60);
+    }
   }
 
   function goNext() {
+    if (randomMode) { openRandom(); return; }
     var list = exercisesOf(level);
     if (idx + 1 < list.length) { openExercise(idx + 1); return; }
     var nextLv = level + 1;

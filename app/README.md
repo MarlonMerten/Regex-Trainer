@@ -21,13 +21,13 @@ einschränken; außerdem fehlen Service Worker, Offline-Cache, Update-Hinweis un
 
 | Bereich          | Was drin ist |
 |------------------|--------------|
-| **Lernen**       | 10 Kapitel vom ersten Muster bis zur Textanalyse, mit editierbaren Beispielen |
+| **Lernen**       | 14 Kapitel vom ersten Muster bis zu Validierung und Performance, mit editierbaren Beispielen |
 | **Nachschlagen** | 119 Einträge: Syntax, `re`-Befehle, Match-Objekt, pandas `.str`, Rezepte, Stolperfallen |
 | **Playground**   | Live-Tester mit Trefferhervorhebung, Gruppenansicht und Baustein-für-Baustein-Erklärung |
 | **Training**     | 53 Aufgaben in 5 Stufen, jede gegen drei Texte geprüft |
-| **Quiz**         | 36 Multiple-Choice-Fragen nach Klausurmuster |
+| **Quiz**         | 60 Multiple-Choice-Fragen, standardmäßig in zufälligen 10er-Runden |
 
-Tastatur: `1`–`5` wechseln die Ansicht, `⌘K` springt in die Suche.
+Tastatur: `1`–`6` wechseln die Ansicht, `⌘K` springt in die Suche.
 
 ## Warum eine eigene Engine
 
