@@ -40,10 +40,10 @@
       why: 'Der Punkt. \\w ist enger (nur Wortzeichen), \\S ist „kein Leerraum“, und * ist ein Quantifizierer, kein Platzhalter.'
     },
     {
-      id: 'q05', level: 1, q: 'Wie schreibt man ein Muster in Python richtig?',
+      id: 'q05', level: 1, q: 'Welche Schreibweise ist für Regex mit Backslashes in Python empfohlen?',
       options: ['"\\d+"', "r'\\d+'", 'f"\\d+"', "'''\\d+'''"],
       correct: 1,
-      why: 'Als Raw String. Sonst verarbeitet Python die Backslashes selbst — bei \\d fällt das noch nicht auf, bei \\b (Backspace!) schon.'
+      why: 'Ein Raw String reicht die Backslashes unverändert an re weiter. Ein gewöhnlicher String mit \\d kann derzeit zwar funktionieren, aber bei \\b entsteht ein Backspace und unbekannte String-Escapes erzeugen Warnungen. Deshalb ist r"…" die verlässliche Standardform.'
     },
 
     /* ---------- Stufe 2 ---------- */
@@ -93,15 +93,15 @@
       demo: { pattern: '<[^>]+>', text: '<div>Text</div>' }
     },
     {
-      id: 'q11', level: 2, q: 'Welche Zeichen musst du <b>innerhalb</b> von <code>[ ]</code> maskieren?',
+      id: 'q11', level: 2, q: 'Welche Zeichen brauchen <b>innerhalb</b> von <code>[ ]</code> besondere Behandlung?',
       options: [
         'alle Metazeichen wie draußen auch',
-        'nur ] \\ ^ (am Anfang) und - (in der Mitte)',
+        '] und \\, außerdem ^ am Anfang und - zwischen Zeichen',
         'gar keine',
         'nur den Punkt'
       ],
       correct: 1,
-      why: 'In einer Zeichenklasse verlieren die meisten Metazeichen ihre Bedeutung. <code>[.+*]</code> sind einfach Punkt, Plus und Stern.'
+      why: 'In einer Zeichenklasse verlieren die meisten Metazeichen ihre Bedeutung. <code>[.+*]</code> sind einfach Punkt, Plus und Stern. Ein Bindestrich ist am Anfang oder Ende auch ohne Backslash wörtlich; ein <code>]</code> lässt sich ebenfalls positionsabhängig oder maskiert schreiben.'
     },
 
     /* ---------- Stufe 3 ---------- */
@@ -134,7 +134,7 @@
         '\\A funktioniert nur in Zeichenklassen'
       ],
       correct: 1,
-      why: '\\A und \\Z sind die „harten“ Anker: sie lassen sich von re.M nicht beeindrucken.'
+      why: '\\A und \\z sind die absoluten Anker: Sie lassen sich von re.M nicht beeindrucken. In Python 3.14 ist \\Z ein gleichbedeutender Alias für \\z.'
     },
     {
       id: 'q15', level: 3, q: 'Welche Aussage über Anker stimmt?',
@@ -149,7 +149,7 @@
     },
     {
       id: 'q16', level: 3, q: 'Was liefert dieser Aufruf?',
-      code: 're.findall(r"\\w+", "Größe")   # Python 3',
+      code: 're.findall(r"\\w+", "Größe")   # Python 3.14',
       options: ["['Gr', 'e']", "['Größe']", "['G', 'r', 'ö', 'ß', 'e']", "[]"],
       correct: 1,
       why: 'Python 3 ist standardmäßig unicode-bewusst — Umlaute und ß zählen zu \\w. Erst mit dem Flag re.A käme <code>[\'Gr\', \'e\']</code> heraus.',
@@ -216,7 +216,7 @@
       id: 'q22', level: 4, q: 'Wie heißt eine benannte Gruppe in Python?',
       options: ['(?&lt;name&gt;…)', '(?P&lt;name&gt;…)', '(?name:…)', '(&lt;name&gt;…)'],
       correct: 1,
-      why: 'Python schreibt das P mit. Die Variante ohne P stammt aus JavaScript und .NET — in Python 3.12+ wird sie zwar auch akzeptiert, in der Klausur zählt aber die Python-Schreibweise.'
+      why: 'Python schreibt das P mit: <code>(?P&lt;name&gt;…)</code>. <code>(?&lt;name&gt;…)</code> ist unter anderem JavaScript-Syntax und wird auch in Python 3.14 nicht als benannte Gruppe akzeptiert.'
     },
 
     /* ---------- Stufe 5 ---------- */
@@ -318,7 +318,7 @@
         'Python unterstützt es nicht'
       ],
       correct: 1,
-      why: 'Bei einem langen Nicht-Treffer probiert die Engine exponentiell viele Aufteilungen durch — das Programm hängt. Faustregel: keinen Quantifizierer um eine Gruppe legen, die selbst quantifiziert ist.'
+      why: 'Bei diesem Muster probiert die Engine für einen langen Nicht-Treffer exponentiell viele Aufteilungen der a-Folge. Verschachtelte Quantifizierer über derselben Zeichenmenge sind deshalb ein Warnsignal; formuliere die Wiederholung eindeutig oder nutze, wo passend, atomare Gruppen.'
     },
     {
       id: 'q33', level: 5, q: 'Womit trennst du Sätze, ohne die Satzzeichen zu verlieren?',
@@ -342,6 +342,25 @@
       ],
       correct: 1,
       why: 'Genau deshalb nimmt man finditer, wenn man <code>m.start()</code>, <code>m.span()</code> oder <code>m.groupdict()</code> braucht — oder wenn der Text riesig ist.'
+    },
+    {
+      id: 'q35', level: 2, q: 'Was liefert dieser Aufruf bei einem Python-<code>str</code>?',
+      code: 're.findall(r"\\d+", "ASCII 12, arabisch-indisch ٣٤")',
+      options: ["['12']", "['12', '٣٤']", "['1', '2', '٣', '٤']", '[]'],
+      correct: 1,
+      why: '<code>\\d</code> steht standardmäßig für jede Unicode-Dezimalziffer. Erst mit <code>re.A</code> wäre das Ergebnis nur <code>[\'12\']</code>.',
+      demo: { pattern: '\\d+', text: 'ASCII 12, arabisch-indisch ٣٤' }
+    },
+    {
+      id: 'q36', level: 3, q: 'Welche Aussage zu <code>\\z</code> stimmt für Python 3.14?',
+      options: [
+        'Es markiert das absolute Stringende; \\Z ist ein kompatibler Alias',
+        'Es markiert nur ein Zeilenende mit re.M',
+        'Es steht für eine beliebige Ziffer',
+        'Python unterstützt \\z erst ab Version 4'
+      ],
+      correct: 0,
+      why: '<code>\\z</code> wurde in Python 3.14 als Anker für das absolute Stringende ergänzt. <code>\\Z</code> hat dort dieselbe Bedeutung; in älteren Python-Versionen verwendet man <code>\\Z</code>.'
     }
   ];
 })(window);

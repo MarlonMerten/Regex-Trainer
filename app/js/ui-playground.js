@@ -21,32 +21,63 @@
     '|', '(?=…)', '(?!…)', '(?<=…)', '\\1'
   ];
 
+  var EXAMPLES = [
+    { label: 'Geldbeträge', pattern: '\\d+(?:[.,]\\d+)?\\s*(?:€|[Ee]uros?)', flags: '', text: DEFAULTS.text },
+    { label: 'E-Mail', pattern: '[\\w.+-]+@[\\w-]+\\.[\\w.]+', flags: '', text: 'Kontakt: anna@uni.de und support@firma.co.uk — spam@ ist keins.' },
+    { label: 'IP-Adresse', pattern: '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b', flags: '', text: 'Server 192.168.0.1 und 10.0.0.42 im Log, dazu 999.999.1.1 als Fehleintrag.' },
+    { label: 'Log-Zeile', pattern: '^\\[(\\d{4}-\\d{2}-\\d{2})\\]\\s+(\\w+)\\s+(.*)$', flags: 'm', text: '[2024-12-24] ERROR Festplatte voll\n[2024-12-24] INFO Backup ok' },
+    { label: 'Umlaute \\w', pattern: '\\b\\w+\\b', flags: '', text: 'Größe und Café — Wörter mit Umlauten.' }
+  ];
+
   var st, rx, flags, fnSel, replWrap, replInp, ed;
   var outBox, metaBox, tokBox, tokList, matchBox, pyBox, summaryBox;
+  var renderSeq = 0, saveTimer = null, alive = false;
 
   function build(container) {
-    st = RT.store.get('playground') || Object.assign({}, DEFAULTS);
+    var saved = RT.store.get('playground');
+    st = saved ? Object.assign({}, saved) : Object.assign({}, DEFAULTS);
+    alive = true;
     ['pattern', 'flags', 'fn', 'repl', 'text'].forEach(function (k) {
       if (st[k] === undefined) st[k] = DEFAULTS[k];
     });
 
     container.appendChild(el('div', { class: 'page-head' }, [
       el('h1', { text: 'Playground' }),
-      el('p', { text: 'Muster bauen und sofort sehen, was passiert — mit Python-Semantik: Unicode-\\w, die Gruppenregel von findall und die Rückgabewerte, wie re sie liefert.' })
+      el('p', { text: 'Muster bauen und sofort sehen, was passiert — mit der unterstützten Python-3.14-Teilmenge: Unicode-\\w, die Gruppenregel von findall und passende re-Rückgabewerte.' })
     ]));
 
-    /* ---------- Eingabezeile ---------- */
-    rx = U.makeRegexInput(st.pattern, function (v) { st.pattern = v; render(); }, 'Muster … z. B. \\b\\w+@\\w+\\.\\w+\\b');
-    flags = U.makeFlags(st.flags, function (v) { st.flags = v; render(); });
+    var exampleSel = el('select', { class: 'select', 'aria-label': 'Beispiel laden' },
+      [el('option', { value: '', text: 'Beispiel laden …' })].concat(
+        EXAMPLES.map(function (ex, i) { return el('option', { value: String(i), text: ex.label }); })
+      )
+    );
+    exampleSel.addEventListener('change', function () {
+      if (exampleSel.value === '') return;
+      var ex = EXAMPLES[+exampleSel.value];
+      st.pattern = ex.pattern;
+      st.flags = ex.flags || '';
+      st.text = ex.text;
+      apply(st);
+      exampleSel.value = '';
+      U.toast('Beispiel „' + ex.label + '" geladen');
+    });
 
-    fnSel = el('select', { class: 'select' }, U.FN_LABELS.map(function (f) {
+    /* ---------- Eingabezeile ---------- */
+    rx = U.makeRegexInput(st.pattern, function (v) { st.pattern = v; requestRender(); }, 'Muster … z. B. \\b\\w+@\\w+\\.\\w+\\b', 'Regulärer Ausdruck');
+    flags = U.makeFlags(st.flags, function (v) { st.flags = v; requestRender(); }, null, 'Regex-Flags');
+
+    fnSel = el('select', { class: 'select', 'aria-label': 'Regex-Funktion' }, U.FN_LABELS.map(function (f) {
       return el('option', { value: f[0], text: 're.' + f[1] + '()' });
     }));
     fnSel.value = st.fn;
-    fnSel.addEventListener('change', function () { st.fn = fnSel.value; syncRepl(); render(); });
+    fnSel.addEventListener('change', function () { st.fn = fnSel.value; syncRepl(); requestRender(); });
 
-    replInp = el('input', { class: 'input', type: 'text', spellcheck: 'false', placeholder: 'Ersatztext, z. B. \\1,\\2', value: st.repl });
-    replInp.addEventListener('input', function () { st.repl = replInp.value; render(); });
+    replInp = el('input', {
+      class: 'input', type: 'text', spellcheck: 'false',
+      placeholder: 'Ersatztext, z. B. \\1,\\2', value: st.repl,
+      'aria-label': 'Ersatztext'
+    });
+    replInp.addEventListener('input', function () { st.repl = replInp.value; requestRender(); });
     replWrap = el('div', { class: 'rx-wrap', style: 'flex:1 1 200px;min-width:0' }, [
       el('span', { class: 'rx-fix l', text: 'r"' }), replInp, el('span', { class: 'rx-fix r', text: '"' })
     ]);
@@ -57,7 +88,7 @@
         el('span', { class: 'hint-r', id: 'pg-gcount' })
       ]),
       rx.node,
-      el('div', { class: 'pg-row', style: 'margin-top:2px' }, [flags.node, fnSel, replWrap])
+      el('div', { class: 'pg-row pg-row-tight' }, [flags.node, fnSel, replWrap, exampleSel])
     ]);
 
     /* ---------- Bausteine zum Einfügen ---------- */
@@ -69,7 +100,7 @@
     });
 
     /* ---------- Textbereich ---------- */
-    ed = U.makeEditor({ onInput: function (v) { st.text = v; render(); }, placeholder: 'Testtext …' });
+    ed = U.makeEditor({ onInput: function (v) { st.text = v; requestRender(); }, placeholder: 'Testtext …', ariaLabel: 'Testtext' });
     var textBlock = el('div', { class: 'pg-block' }, [
       el('div', { class: 'field-head' }, [
         el('span', { class: 'label', text: 'Testtext' }),
@@ -79,7 +110,7 @@
     ]);
 
     /* ---------- Ergebnis ---------- */
-    outBox = el('div', { class: 'result' });
+    outBox = el('div', { class: 'result', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
     metaBox = el('div', { class: 'meta' });
     var resultBlock = el('div', { class: 'pg-block' }, [
       el('span', { class: 'label', text: 'Rückgabewert' }),
@@ -89,10 +120,7 @@
     /* ---------- Python-Zeile ---------- */
     pyBox = el('pre', { class: 'code', style: 'margin:0' });
     var copyPy = el('button', { class: 'btn sm ghost', type: 'button', html: U.icon('copy') + ' Kopieren' });
-    copyPy.addEventListener('click', function () {
-      var t = pyBox.textContent;
-      if (navigator.clipboard) navigator.clipboard.writeText(t).then(function () { U.toast('Kopiert'); });
-    });
+    copyPy.addEventListener('click', function () { U.copyText(pyBox.textContent); });
     var pyBlock = el('div', { class: 'pg-block' }, [
       el('div', { class: 'field-head' }, [
         el('span', { class: 'label', text: 'Als Python' }), copyPy
@@ -110,7 +138,7 @@
     /* ---------- Seitenleiste ---------- */
     tokBox = el('div', { class: 'tokens' });
     summaryBox = el('div', { style: 'font-size:13px;color:var(--text-2);margin-top:10px' });
-    tokList = el('div', { class: 'tok-list', style: 'margin-top:12px' });
+    tokList = el('ul', { class: 'tok-list', role: 'list' });
     var explainCard = el('div', { class: 'card card-pad' }, [
       el('span', { class: 'label', text: 'Muster erklärt' }),
       tokBox, summaryBox, tokList
@@ -138,8 +166,16 @@
 
     syncRepl();
     ed.set(st.text);
-    render();
+    if (saved) requestRender();
+    else renderSync();
     requestAnimationFrame(function () { ed.grow(); });
+    U.onDispose(container, function () {
+      alive = false;
+      renderSeq++;
+      render.cancel();
+      clearTimeout(saveTimer);
+      ed.destroy();
+    });
   }
 
   function syncRepl() {
@@ -164,14 +200,19 @@
     inp.setSelectionRange(caret, caret);
     inp.focus();
     st.pattern = inp.value;
-    render();
+    requestRender();
   }
 
-  var saveTimer;
-  function render() {
-    var res = E.run(st.pattern, st.flags, st.text, st.fn, { repl: st.repl });
+  function snapshot() {
+    return {
+      pattern: st.pattern, flags: st.flags, fn: st.fn,
+      repl: st.repl || '', text: st.text
+    };
+  }
 
-    /* Ergebnis */
+  function paintResult(res, snap) {
+    if (!alive) return;
+    outBox.setAttribute('aria-busy', 'false');
     if (!res.ok) {
       ed.paint([]);
       outBox.className = 'result bad';
@@ -188,7 +229,7 @@
       var bits = ['<span>Treffer <b>' + res.matches.length + '</b></span>'];
       if (res.compiled.groupCount) bits.push('<span>Gruppen <b>' + res.compiled.groupCount + '</b></span>');
       if (res.compiled.groupNames.length) bits.push('<span>benannt <b>' + res.compiled.groupNames.join(', ') + '</b></span>');
-      if (st.fn === 'findall') bits.push('<span>' + findallRule(res.compiled.groupCount) + '</span>');
+      if (snap.fn === 'findall') bits.push('<span>' + findallRule(res.compiled.groupCount) + '</span>');
       res.warnings.forEach(function (w) { bits.push('<span style="color:var(--warn)">⚠ ' + U.esc(w) + '</span>'); });
       metaBox.innerHTML = bits.join('');
 
@@ -196,13 +237,55 @@
       setText('pg-gcount', res.compiled.groupCount ? res.compiled.groupCount + ' Gruppe(n)' : '');
       renderMatches(res.matches, res.compiled);
     }
+  }
 
-    setText('pg-len', st.text.length + ' Zeichen');
-    renderExplain();
-    renderPy();
+  function renderStatic(snap) {
+    setText('pg-len', snap.text.length + ' Zeichen');
+    renderExplain(snap.pattern);
+    renderPy(snap);
+  }
 
+  function scheduleSave(snap) {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () { RT.store.set('playground', st); }, 400);
+    saveTimer = setTimeout(function () {
+      if (alive) RT.store.set('playground', Object.assign({}, snap));
+    }, 400);
+  }
+
+  function flush() {
+    clearTimeout(saveTimer);
+    if (alive && st) RT.store.set('playground', snapshot());
+    RT.store.flush();
+  }
+
+  function renderSync() {
+    var snap = snapshot();
+    renderSeq++;
+    renderStatic(snap);
+    paintResult(E.run(snap.pattern, snap.flags, snap.text, snap.fn, { repl: snap.repl }), snap);
+    scheduleSave(snap);
+  }
+
+  function renderAsync() {
+    var seq = renderSeq;
+    var snap = snapshot();
+    outBox.setAttribute('aria-busy', 'true');
+    RT.safeRun.run(snap.pattern, snap.flags, snap.text, snap.fn, { repl: snap.repl }).then(function (res) {
+      if (!alive || seq !== renderSeq) return;
+      paintResult(res, snap);
+    });
+  }
+
+  var render = U.debounce(renderAsync, 90);
+
+  function requestRender() {
+    var snap = snapshot();
+    renderSeq++;
+    ed.paint([]);
+    outBox.setAttribute('aria-busy', 'true');
+    renderStatic(snap);
+    scheduleSave(snap);
+    render();
   }
 
   function findallRule(n) {
@@ -233,10 +316,12 @@
       if (m.groups.length) {
         var g = el('div', { class: 'match-groups' });
         m.groups.forEach(function (val, gi) {
-          var name = null;
-          if (m.named) {
-            Object.keys(m.named).forEach(function (k) {
-              if (m.named[k] === val && name === null) name = k;
+          var namesByIndex = compiled.groupNamesByIndex || compiled.groupNameByIndex || [];
+          var name = namesByIndex[gi] || null;
+          if (!name && compiled.groupIndexByName) {
+            Object.keys(compiled.groupIndexByName).some(function (candidate) {
+              if (compiled.groupIndexByName[candidate] === gi + 1) { name = candidate; return true; }
+              return false;
             });
           }
           g.appendChild(el('div', null, [
@@ -253,20 +338,23 @@
     }
   }
 
-  function renderExplain() {
-    var toks = RT.explain.tokenize(st.pattern);
+  function renderExplain(pattern) {
+    var toks = RT.explain.tokenize(pattern);
+    var visibleTokens = toks.slice(0, 500);
     tokBox.innerHTML = '';
     tokList.innerHTML = '';
     if (!toks.length) {
       summaryBox.textContent = 'Gib ein Muster ein — hier wird es Baustein für Baustein zerlegt.';
       return;
     }
-    summaryBox.textContent = '';
-    toks.forEach(function (t) {
+    summaryBox.textContent = toks.length > visibleTokens.length
+      ? 'Die Erklärung zeigt die ersten 500 von ' + toks.length + ' Bausteinen.'
+      : '';
+    visibleTokens.forEach(function (t) {
       var chip = el('span', { class: 'tok k-' + t.kind, text: t.raw });
       tokBox.appendChild(chip);
 
-      var row = el('div', { class: 'tok-row' }, [
+      var row = el('li', { class: 'tok-row' }, [
         el('span', { class: 't tok k-' + t.kind, text: t.raw }),
         el('span', { class: 'd', html: '<b>' + U.esc(t.label) + '</b> — ' + U.esc(t.desc) })
       ]);
@@ -274,20 +362,24 @@
       row.addEventListener('mouseleave', function () { chip.style.outline = ''; });
       tokList.appendChild(row);
     });
+    if (toks.length > visibleTokens.length) {
+      tokBox.appendChild(el('span', { class: 'tok k-cmt', text: '…' }));
+    }
   }
 
-  function renderPy() {
+  function renderPy(snap) {
     var lines = ['import re', ''];
-    var flagStr = st.flags ? ', ' + st.flags.toUpperCase().split('').map(function (f) { return 're.' + f; }).join(' | ') : '';
-    var pat = 'r"' + st.pattern.replace(/"/g, '\\"') + '"';
+    var flagExpr = snap.flags ? snap.flags.toUpperCase().split('').map(function (f) { return 're.' + f; }).join(' | ') : '';
+    var flagStr = flagExpr ? ', flags=' + flagExpr : '';
+    var pat = pythonString(snap.pattern, true);
     var call;
-    if (st.fn === 'sub') call = 're.sub(' + pat + ', r"' + st.repl.replace(/"/g, '\\"') + '", text' + flagStr + ')';
-    else call = 're.' + st.fn + '(' + pat + ', text' + flagStr + ')';
+    if (snap.fn === 'sub') call = 're.sub(' + pat + ', ' + pythonString(snap.repl, true) + ', text' + flagStr + ')';
+    else call = 're.' + snap.fn + '(' + pat + ', text' + flagStr + ')';
 
-    if (st.fn === 'finditer') {
+    if (snap.fn === 'finditer') {
       lines.push('for m in ' + call + ':');
       lines.push('    print(m.group(), m.span())');
-    } else if (st.fn === 'search' || st.fn === 'match' || st.fn === 'fullmatch') {
+    } else if (snap.fn === 'search' || snap.fn === 'match' || snap.fn === 'fullmatch') {
       lines.push('if m := ' + call + ':');
       lines.push('    print(m.group())');
     } else {
@@ -295,6 +387,22 @@
       lines.push('print(ergebnis)');
     }
     pyBox.innerHTML = '<code>' + U.pyCode(lines.join('\n')) + '</code>';
+  }
+
+  function pythonString(value, preferRaw) {
+    value = String(value);
+    var trailing = /\\+$/.exec(value);
+    var rawSafe = !/[\r\n]/.test(value) && (!trailing || trailing[0].length % 2 === 0);
+    if (preferRaw && rawSafe) {
+      if (value.indexOf('"') === -1) return 'r"' + value + '"';
+      if (value.indexOf("'") === -1) return "r'" + value + "'";
+    }
+    return '"' + value
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t') + '"';
   }
 
   function apply(cfg) {
@@ -305,9 +413,9 @@
     replInp.value = st.repl || '';
     syncRepl();
     ed.set(st.text);
-    render();
+    requestRender();
   }
 
   RT.views = RT.views || {};
-  RT.views.play = { build: build, apply: apply };
+  RT.views.play = { build: build, apply: apply, flush: flush };
 })(window);

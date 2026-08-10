@@ -48,10 +48,16 @@
     },
     {
       sym: 'r"..."', title: 'Raw String', cat: 'basics',
-      desc: 'In Python schreibt man Regex-Muster IMMER als Raw String. Sonst frisst Python die Backslashes selbst, bevor re sie zu sehen bekommt: "\\b" wird zum Backspace-Zeichen, r"\\b" bleibt die Wortgrenze.',
-      note: 'Faustregel: jedes Muster mit r davor. Kostet nichts, rettet Nerven.',
+      desc: 'Raw Strings sind für Regex-Muster mit Backslashes die empfohlene Schreibweise. Python wertet dann keine String-Escapes wie "\\b" als Backspace aus; r"\\b" erreicht re unverändert als Wortgrenze.',
+      note: 'Faustregel: Muster mit Backslashes als Raw String schreiben. Ein Raw String darf allerdings nicht mit einem einzelnen Backslash enden.',
       py: 'regex = r"\\bWort\\b"   # richtig\nregex = "\\bWort\\b"     # kaputt: \\b ist Backspace',
       tags: ['rawstring', 'backslash', 'python']
+    },
+    {
+      sym: 'Python 3.14', title: 'Zielversion des Trainers', cat: 'basics',
+      desc: 'Die Erklärungen und Python-Schnipsel beziehen sich auf Python 3.14 und das Standardmodul re mit Unicode-Strings (str). Abweichungen älterer Versionen sind markiert.',
+      note: 'Wichtigstes Versionsdetail hier: \\z wurde in Python 3.14 ergänzt; \\Z bleibt als kompatibler Alias erhalten.',
+      tags: ['python', 'version', '3.14', 'kompatibilität']
     },
     {
       sym: 're.escape()', title: 'Text sicher einbauen', cat: 'basics',
@@ -70,9 +76,9 @@
     /* ===================== ZEICHENKLASSEN ===================== */
     {
       sym: '\\d', title: 'Ziffer', cat: 'classes',
-      desc: 'Genau eine Ziffer. Entspricht [0-9] — in Python 3 zusätzlich Ziffern anderer Schriftsysteme.',
-      pattern: '\\d', text: 'Hausnummer 27', fn: 'findall',
-      py: 're.findall(r"\\d", "Hausnummer 27")', tags: ['zahl', 'ziffer', 'digit']
+      desc: 'Genau eine Unicode-Dezimalziffer (Kategorie Nd), also [0-9] und auch Ziffern anderer Schriftsysteme. Mit re.A entspricht \\d nur [0-9].',
+      pattern: '\\d', text: 'ASCII 27, arabisch-indisch ٢٧', fn: 'findall',
+      py: 're.findall(r"\\d", "ASCII 27, arabisch-indisch ٢٧")', tags: ['zahl', 'ziffer', 'digit', 'unicode']
     },
     {
       sym: '\\D', title: 'Keine Ziffer', cat: 'classes',
@@ -81,7 +87,7 @@
     },
     {
       sym: '\\w', title: 'Wortzeichen', cat: 'classes',
-      desc: 'Buchstabe, Ziffer oder Unterstrich. In Python 3 unicode-bewusst: Umlaute und Akzente gehören dazu.',
+      desc: 'Ein Unicode-alphanumerisches Zeichen oder der Unterstrich. Dazu gehören weit mehr als ASCII und Umlaute; mit re.A wird daraus [a-zA-Z0-9_].',
       pattern: '\\w+', text: '#Python_3 für Anfänger!', fn: 'findall',
       note: 'Merke: \\w schließt den Unterstrich ein, aber nicht den Bindestrich.',
       tags: ['wort', 'word', 'buchstabe']
@@ -98,7 +104,7 @@
     },
     {
       sym: '\\S', title: 'Kein Whitespace', cat: 'classes',
-      desc: 'Jedes sichtbare Zeichen. \\S+ ist ein grober „Token“-Begriff, der auch Satzzeichen mitnimmt.',
+      desc: 'Jedes Zeichen, das kein Unicode-Whitespace ist. \\S+ ist ein grober „Token“-Begriff, der auch Satz- und Steuerzeichen mitnehmen kann.',
       pattern: '\\S+', text: ' A\tB ', fn: 'findall', tags: ['token']
     },
     {
@@ -138,9 +144,9 @@
     },
     {
       sym: '[-.]', title: 'Sonderzeichen in Mengen', cat: 'sets',
-      desc: 'In einer Zeichenklasse verlieren die meisten Metazeichen ihre Bedeutung. Der Bindestrich muss aber ganz vorn oder ganz hinten stehen, sonst wird er als Bereich gelesen.',
+      desc: 'In einer Zeichenklasse verlieren die meisten Metazeichen ihre Bedeutung. Der Bindestrich steht für einen Bereich, außer er wird maskiert oder an eine eindeutig wörtliche Position wie Anfang oder Ende gesetzt.',
       pattern: '[0-9.,-]+', text: 'Werte: 1.234,56 und 7-9', fn: 'findall',
-      note: 'Zu maskieren sind in [ ] nur: ] \\ ^ (am Anfang) und - (in der Mitte).',
+      note: 'Sonderbehandlung brauchen vor allem \\, ], ^ an erster Stelle und - zwischen Zeichen. ] beziehungsweise - können je nach Position auch ohne Backslash wörtlich sein.',
       tags: ['bindestrich', 'escape', 'klasse']
     },
     {
@@ -180,6 +186,7 @@
       sym: '\\B', title: 'Keine Wortgrenze', cat: 'anchors',
       desc: 'Das Gegenteil: eine Position mitten im Wort. Nützlich, um Treffer INNERHALB von Wörtern zu finden.',
       pattern: '\\Bcat\\B', text: 'cat scattered catalog', fn: 'findall',
+      note: 'Seit Python 3.14 passt \\B außerdem auf den leeren Eingabestring; ältere Versionen taten das nicht.',
       tags: ['innen', 'negation']
     },
     {
@@ -188,11 +195,11 @@
       pattern: '\\AZeile', text: 'Zeile 1\nZeile 2', fn: 'findall', tags: ['anfang']
     },
     {
-      sym: '\\Z', title: 'Absolutes Ende', cat: 'anchors',
-      desc: 'Wie $, ignoriert aber re.M und akzeptiert kein abschließendes \\n.',
-      pattern: '\\d\\Z', text: 'Zeile 1\nZeile 2', fn: 'findall',
-      note: 'In anderen Sprachen heißt das \\z — Python kennt nur \\Z.',
-      tags: ['ende']
+      sym: '\\z / \\Z', title: 'Absolutes Ende', cat: 'anchors',
+      desc: 'Passt ausschließlich am Stringende und ignoriert re.M. \\z ist die klare Schreibweise ab Python 3.14; \\Z ist dort ein gleichbedeutender Alias.',
+      pattern: '\\d\\z', text: 'Zeile 1\nZeile 2', fn: 'findall',
+      note: '\\z wurde in Python 3.14 ergänzt. Für Python 3.13 und älter verwendest du \\Z.',
+      tags: ['ende', 'python 3.14', 'z']
     },
 
     /* ===================== QUANTIFIZIERER ===================== */
@@ -200,7 +207,7 @@
       sym: '*', title: 'Beliebig oft', cat: 'quant',
       desc: 'Null oder mehr Wiederholungen des Bausteins davor. Kann also auch gar nichts matchen — daher die vielen leeren Treffer.',
       pattern: 'a*', text: 'baaa', fn: 'findall',
-      note: 'Ein alleinstehendes * liefert oft leere Strings. Meist willst du + .',
+      note: 'Ein mit * quantifizierter Baustein liefert oft leere Treffer. Meist willst du +.',
       tags: ['stern', 'null oder mehr']
     },
     {
@@ -356,7 +363,7 @@
     },
     {
       sym: 're.A', title: 'ASCII erzwingen', cat: 'flags',
-      desc: 're.ASCII: \\w, \\d, \\b beschränken sich auf ASCII. Ohne dieses Flag ist Python 3 unicode-bewusst.',
+      desc: 're.ASCII: Kurzformen wie \\w, \\d, \\s und ihre Gegenstücke sowie \\b/\\B werden auf ASCII beschränkt. Ohne dieses Flag sind str-Muster unicode-bewusst.',
       pattern: '\\w+', flags: 'a', text: 'Café Größe', fn: 'findall',
       note: 'Vergleiche denselben Ausdruck ohne das Flag — der Unterschied bei Umlauten ist deutlich.',
       tags: ['ascii', 'unicode', 'umlaute']
@@ -378,7 +385,7 @@
     /* ===================== re-BEFEHLE ===================== */
     {
       sym: 're.findall(muster, text)', title: 'Alle Treffer als Liste', cat: 're',
-      desc: 'Der meistgenutzte Befehl. Liefert eine Liste von Strings — oder von Gruppen, sobald das Muster Klammern enthält.',
+      desc: 'Liefert alle nicht überlappenden Treffer als Liste. Fangende Gruppen ändern die Listenelemente; nicht-fangende Gruppen <code>(?:…)</code> tun das nicht.',
       pattern: '\\d+', text: 'Heute 20 Bananen für 50 Euro', fn: 'findall',
       py: 'ergebnisse = re.findall(r"\\d+", text)\n# ["20", "50"]',
       note: 'Gruppenregel: 0 Gruppen → ganze Treffer · 1 Gruppe → nur diese Gruppe · mehrere → Tupel.',
@@ -418,7 +425,7 @@
       desc: 'Ersetzt alle Treffer. Im Ersatztext greift \\1 auf Gruppe 1 zu, \\g<name> auf benannte Gruppen.',
       pattern: '(\\d+)\\.(\\d+)', repl: '\\1,\\2', text: 'Preise: 15.99 und 3.20', fn: 'sub',
       py: 're.sub(r"(\\d+)\\.(\\d+)", r"\\1,\\2", text)',
-      note: 'Auch der Ersatztext gehört in einen Raw String, sonst wird \\1 falsch interpretiert.',
+      note: 'Ersatztexte mit Rückverweisen am besten als Raw String schreiben, damit Python etwa \\1 nicht schon als String-Escape interpretiert.',
       tags: ['sub', 'ersetzen', 'replace']
     },
     {
@@ -448,7 +455,7 @@
     },
     {
       sym: 're.compile(muster)', title: 'Muster vorkompilieren', cat: 're',
-      desc: 'Übersetzt das Muster einmal und liefert ein Pattern-Objekt mit allen Methoden. Lohnt sich in Schleifen und macht den Code lesbarer.',
+      desc: 'Liefert ein wiederverwendbares Pattern-Objekt mit allen Methoden. Das macht wiederholte Nutzung klarer; einfache Modulaufrufe werden allerdings ebenfalls intern zwischengespeichert.',
       py: 'ZAHL = re.compile(r"\\d+(?:[.,]\\d+)?")\nfor zeile in zeilen:\n    print(ZAHL.findall(zeile))',
       tags: ['compile', 'performance', 'pattern']
     },
@@ -550,39 +557,40 @@
 
     /* ===================== REZEPTE ===================== */
     {
-      sym: '\\b\\d+\\b', title: 'Ganze Zahlen', cat: 'recipes',
-      desc: 'Nur vollständige Zahlen, nicht Teile von 3.14 oder abc123.',
-      pattern: '\\b\\d+\\b', text: 'Werte 42, 3.14 und x7', fn: 'findall',
-      tags: ['zahl', 'integer']
+      sym: '(?<![\\w.,])\\d+(?!\\w|[.,]\\d)', title: 'Eigenständige positive Ganzzahlen', cat: 'recipes',
+      desc: 'Positive Ganzzahlen als eigene Tokens: keine Teiltreffer aus 3.14, 2,50 oder abc123. Satzzeichen nach einer Zahl bleiben erlaubt.',
+      pattern: '(?<![\\w.,])\\d+(?!\\w|[.,]\\d)', text: 'Werte 42, 3.14, 2,50, x7 und 99.', fn: 'findall',
+      note: '\\b\\d+\\b reicht dafür nicht: Es findet in 3.14 die beiden Teile 3 und 14.',
+      tags: ['zahl', 'integer', 'ganzzahl', 'dezimal']
     },
     {
-      sym: '\\d+(?:[.,]\\d+)?', title: 'Dezimalzahl', cat: 'recipes',
-      desc: 'Zahl mit optionalen Nachkommastellen, Punkt oder Komma als Trenner.',
-      pattern: '\\d+(?:[.,]\\d+)?', text: 'Preise: 2,50 · 3.20 · 10', fn: 'findall',
+      sym: '\\b\\d+(?:[.,]\\d+)?\\b', title: 'Dezimalzahl', cat: 'recipes',
+      desc: 'Ziffernfolge mit optionalen Nachkommastellen, Punkt oder Komma als Trenner; Wortgrenzen schließen alphanumerische Kennungen aus.',
+      pattern: '\\b\\d+(?:[.,]\\d+)?\\b', text: 'Preise: 2,50 · 3.20 · 10, aber nicht v2', fn: 'findall',
       tags: ['dezimal', 'komma', 'preis']
     },
     {
-      sym: '\\d+(?:[.,]\\d+)?\\s*(?:€|[Ee]uros?)', title: 'Geldbetrag', cat: 'recipes',
-      desc: 'Der „Find the money“-Klassiker: Betrag plus Währung in allen Schreibweisen.',
-      pattern: '\\d+(?:[.,]\\d+)?\\s*(?:€|[Ee]uros?)', text: 'A gab 200 euro, das Gerät ist 100Euro wert, dazu 20.50 Euros und 0,50 euro Trinkgeld, am liebsten 500 € pro Tag.', fn: 'findall',
+      sym: '(?<![\\w.,])\\d+(?:[.,]\\d+)?\\s*(?:€(?!\\w)|[Ee]uros?\\b)', title: 'Geldbetrag', cat: 'recipes',
+      desc: 'Der „Find the money“-Klassiker: Betrag plus €, Euro/euro oder deren Pluralformen.',
+      pattern: '(?<![\\w.,])\\d+(?:[.,]\\d+)?\\s*(?:€(?!\\w)|[Ee]uros?\\b)', text: 'A gab 200 euro, das Gerät ist 100Euro wert, dazu 20.50 Euros und 0,50 euro Trinkgeld, am liebsten 500 € pro Tag.', fn: 'findall',
       note: 'Die nicht-fangende Gruppe (?: ) ist hier entscheidend — mit ( ) gäbe findall nur die Währung zurück.',
       tags: ['geld', 'euro', 'währung', 'money']
     },
     {
-      sym: '\\d+(?=\\s*(?:€|[Ee]uros?))', title: 'Nur der Betrag ohne Währung', cat: 'recipes',
+      sym: '(?<![\\w.,])\\d+(?:[.,]\\d+)?(?=\\s*(?:€(?!\\w)|[Ee]uros?\\b))', title: 'Nur der Betrag ohne Währung', cat: 'recipes',
       desc: 'Lookahead statt Gruppe: die Währung wird geprüft, aber nicht mit ausgegeben.',
-      pattern: '\\d+(?:[.,]\\d+)?(?=\\s*(?:€|[Ee]uros?))', text: '100 Euro, 200 euros, 300euro, 400Euros', fn: 'findall',
+      pattern: '(?<![\\w.,])\\d+(?:[.,]\\d+)?(?=\\s*(?:€(?!\\w)|[Ee]uros?\\b))', text: '100 Euro, 200 euros, 300euro, 400Euros', fn: 'findall',
       tags: ['lookahead', 'geld']
     },
     {
-      sym: '[\\w.+-]+@[\\w-]+\\.[\\w.]+', title: 'E-Mail-Adresse', cat: 'recipes',
-      desc: 'Pragmatische Variante — deckt den Alltag ab. Eine wirklich vollständige E-Mail-Regex ist absurd lang.',
-      pattern: '[\\w.+-]+@[\\w-]+\\.[\\w.]+', text: 'Schreib an max.mustermann+news@uni-koeln.de oder info@test.io', fn: 'findall',
+      sym: '[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+', title: 'E-Mail-Adresse (pragmatisch)', cat: 'recipes',
+      desc: 'Pragmatische Variante, die einen abschließenden Satzpunkt nicht mitnimmt. Eine vollständige Prüfung aller E-Mail-Regeln gehört nicht in eine kurze Regex.',
+      pattern: '[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+', text: 'Schreib an max.mustermann+news@uni-koeln.de oder info@test.io.', fn: 'findall',
       tags: ['email', 'mail']
     },
     {
-      sym: 'https?://\\S+', title: 'URL', cat: 'recipes',
-      desc: 'Grobe, aber robuste URL-Erkennung in Fließtext.',
+      sym: 'https?://[^\\s<>\"]+', title: 'URL', cat: 'recipes',
+      desc: 'Grobe URL-Erkennung in Fließtext. Nachgestellte Satzzeichen können je nach Text mit in den Treffer geraten.',
       pattern: 'https?://[^\\s<>"]+', text: 'Siehe https://regex101.com und http://example.org/pfad?x=1', fn: 'findall',
       tags: ['url', 'link', 'http']
     },
@@ -593,14 +601,14 @@
       tags: ['ip', 'log', 'netzwerk']
     },
     {
-      sym: '\\d{2}\\.\\d{2}\\.\\d{4}', title: 'Datum (deutsch)', cat: 'recipes',
-      desc: 'TT.MM.JJJJ. Für ISO-Datum: \\d{4}-\\d{2}-\\d{2}.',
-      pattern: '\\d{1,2}\\.\\d{1,2}\\.\\d{2,4}', text: 'Abgabe am 24.12.2025, Klausur 7.2.26', fn: 'findall',
+      sym: '\\b\\d{2}\\.\\d{2}\\.\\d{4}\\b', title: 'Datum im Format TT.MM.JJJJ', cat: 'recipes',
+      desc: 'Striktes Ziffernformat TT.MM.JJJJ. Es prüft nicht, ob Tag und Monat kalendarisch gültig sind. Für ISO-Datum: \\d{4}-\\d{2}-\\d{2}.',
+      pattern: '\\b\\d{2}\\.\\d{2}\\.\\d{4}\\b', text: 'Abgabe am 24.12.2025, kurz 7.2.26', fn: 'findall',
       tags: ['datum', 'date']
     },
     {
       sym: '\\d{1,2}:\\d{2}(?::\\d{2})?', title: 'Uhrzeit', cat: 'recipes',
-      desc: 'hh:mm mit optionalen Sekunden.',
+      desc: 'Ziffernformat h:mm beziehungsweise hh:mm mit optionalen Sekunden; Wertebereiche wie 0–23 werden nicht geprüft.',
       pattern: '\\d{1,2}:\\d{2}(?::\\d{2})?', text: 'Start 9:00, Ende 17:30:45', fn: 'findall',
       tags: ['zeit', 'uhrzeit']
     },
@@ -612,15 +620,15 @@
       tags: ['html', 'tag']
     },
     {
-      sym: 'href="([^"]+)"', title: 'Link-Ziel extrahieren', cat: 'recipes',
-      desc: 'Die Gruppe holt nur den Inhalt der Anführungszeichen heraus.',
-      pattern: '<a[^>]*href="([^"]+)"', text: '<a class="x" href="page.html">Link</a>', fn: 'findall',
+      sym: '[ \\t]href="([^"]+)"', title: 'Link-Ziel aus einfachem HTML extrahieren', cat: 'recipes',
+      desc: 'Die Gruppe holt den Inhalt eines doppelt quotierten href-Attributs heraus; Whitespace vor href verhindert einen Teiltreffer in data-href.',
+      pattern: '[ \\t]href="([^"]+)"', text: '<a class="x" href="page.html">Link</a>', fn: 'findall',
       tags: ['html', 'link', 'href']
     },
     {
-      sym: '#\\w+', title: 'Hashtag', cat: 'recipes',
-      desc: 'Alles nach einer Raute bis zum nächsten Nicht-Wortzeichen.',
-      pattern: '#\\w+', text: 'Loving #Python and #Regex101!', fn: 'findall',
+      sym: '(?<!\\w)#[A-Za-z]\\w*', title: 'Hashtag', cat: 'recipes',
+      desc: 'Eine Raute außerhalb eines Wortes, ein ASCII-Buchstabe und danach weitere Wortzeichen. So zählen weder #42 noch a#b als Hashtag.',
+      pattern: '(?<!\\w)#[A-Za-z]\\w*', text: 'Loving #Python and #Regex101, aber nicht #42 oder a#b!', fn: 'findall',
       tags: ['hashtag', 'social']
     },
     {
@@ -637,7 +645,7 @@
     },
     {
       sym: '\\b[A-Z]{2,}\\b', title: 'Abkürzungen', cat: 'recipes',
-      desc: 'Zwei oder mehr Großbuchstaben am Stück.',
+      desc: 'Zwei oder mehr ASCII-Großbuchstaben am Stück.',
       pattern: '\\b[A-Z]{2,}\\b', text: 'In den USA und der EU gilt die DSGVO.', fn: 'findall',
       tags: ['abkürzung', 'akronym']
     },
@@ -681,10 +689,10 @@
       tags: ['satz', 'split', 'lookaround']
     },
     {
-      sym: '\\b[a-zA-ZäöüÄÖÜß]+\\b', title: 'Nur Wörter (keine Zahlen)', cat: 'recipes',
-      desc: 'Für Wortzählungen: reine Buchstabenfolgen, deutsche Umlaute inklusive.',
+      sym: "\\b[a-zA-ZäöüÄÖÜß']+\\b", title: 'Wort-Tokens mit Apostroph', cat: 'recipes',
+      desc: 'Für einfache Wortzählungen: lateinische Buchstaben, deutsche Umlaute und gerade Apostrophe; Zahlen und Unterstriche bleiben draußen.',
       pattern: "\\b[a-zA-ZäöüÄÖÜß']+\\b", text: 'Über 42 schöne Wörter, don\'t stop', fn: 'findall',
-      py: 'woerter = re.findall(r"\\b[a-zA-ZäöüÄÖÜß]+\\b", text)\nprint(len(woerter), len(set(woerter)))',
+      py: "woerter = re.findall(r\"\\b[a-zA-ZäöüÄÖÜß']+\\b\", text)\nprint(len(woerter), len(set(woerter)))",
       tags: ['wortzählung', 'wortschatz', 'tokens']
     },
     {
@@ -702,33 +710,33 @@
       tags: ['cleaning', 'nlp', 'tokenisierung']
     },
     {
-      sym: '\\d+\\s?(?:kg|g|t|m|cm)\\b', title: 'Zahl mit Einheit', cat: 'recipes',
-      desc: 'Messwerte samt Einheit, mit oder ohne Leerzeichen.',
-      pattern: '\\d+(?:[.,]\\d+)?\\s?(?:kg|g|t|cm|m)\\b', text: '50 kg, 100g und 1,8 m', fn: 'findall',
+      sym: '(?<![\\w.,])\\d+(?:[.,]\\d+)?\\s?(?:kg|g|t|cm|m)\\b', title: 'Messwert mit Einheit', cat: 'recipes',
+      desc: 'Messwerte mit optionalen Nachkommastellen und Einheit, mit oder ohne Leerzeichen.',
+      pattern: '(?<![\\w.,])\\d+(?:[.,]\\d+)?\\s?(?:kg|g|t|cm|m)\\b', text: '50 kg, 100g und 1,8 m', fn: 'findall',
       tags: ['einheit', 'messwert']
     },
     {
-      sym: '^(\\w+)\\s+(\\d+)$', title: 'Zeile in Felder zerlegen', cat: 'recipes',
+      sym: '^(\\w+)[ \\t]+(\\d+)$', title: 'Zeile in Felder zerlegen', cat: 'recipes',
       desc: 'Zeilenweises Parsen mit mehreren Gruppen — findall liefert dann Tupel.',
-      pattern: '^(\\w+)\\s+(\\d+)$', flags: 'm', text: 'apfel 12\nbirne 7\nkirsche 30', fn: 'findall',
+      pattern: '^(\\w+)[ \\t]+(\\d+)$', flags: 'm', text: 'apfel 12\nbirne 7\nkirsche 30', fn: 'findall',
       tags: ['parsen', 'zeilen', 'tupel']
     },
     {
-      sym: '(?P<level>INFO|WARN|ERROR)', title: 'Logzeile parsen', cat: 'recipes',
+      sym: '^(?P<zeit>\\d{2}:\\d{2}:\\d{2})[ \\t]+(?P<level>INFO|WARN|ERROR)[ \\t]+(?P<msg>.+)$', title: 'Logzeile parsen', cat: 'recipes',
       desc: 'Benannte Gruppen machen aus einer Logzeile direkt ein Dictionary.',
-      pattern: '(?P<zeit>\\d{2}:\\d{2}:\\d{2})\\s+(?P<level>INFO|WARN|ERROR)\\s+(?P<msg>.+)', text: '09:12:01 INFO Start\n09:12:05 ERROR Verbindung verloren', flags: 'm', fn: 'finditer',
+      pattern: '^(?P<zeit>\\d{2}:\\d{2}:\\d{2})[ \\t]+(?P<level>INFO|WARN|ERROR)[ \\t]+(?P<msg>.+)$', text: '09:12:01 INFO Start\n09:12:05 ERROR Verbindung verloren', flags: 'm', fn: 'finditer',
       py: 'for m in PATTERN.finditer(log):\n    rows.append(m.groupdict())\ndf = pd.DataFrame(rows)',
       tags: ['log', 'parsen', 'dataframe']
     },
     {
-      sym: '\\b\\d{5}\\b', title: 'Deutsche Postleitzahl', cat: 'recipes',
-      desc: 'Genau fünf Ziffern als eigenständiges Token.',
-      pattern: '\\b\\d{5}\\b', text: '50667 Köln, nicht 123456', fn: 'findall',
+      sym: '\\b[0-9]{5}\\b', title: 'Deutsche Postleitzahl', cat: 'recipes',
+      desc: 'Genau fünf ASCII-Ziffern als eigenständiges Token.',
+      pattern: '\\b[0-9]{5}\\b', text: '50667 Köln, nicht 123456 oder １２３４５', fn: 'findall',
       tags: ['plz', 'postleitzahl']
     },
     {
       sym: '(?<!\\S)-?\\d+(?!\\S)', title: 'Zahl als eigenes Token', cat: 'recipes',
-      desc: 'Auch negative Zahlen, aber nur wenn links und rechts Leerraum steht. \\b würde beim Minus versagen.',
+      desc: 'Auch negative Zahlen, aber nur wenn links und rechts Whitespace oder der Stringrand steht. \\b allein würde beim Minus versagen.',
       pattern: '(?<!\\S)-?\\d+(?!\\S)', text: 'Werte: -5 12 x9 -3', fn: 'findall',
       tags: ['negativ', 'minus', 'zahl']
     },
@@ -777,13 +785,13 @@
     },
     {
       sym: '"\\d" ohne r', title: 'Vergessener Raw String', cat: 'traps',
-      desc: 'Ohne r interpretiert Python die Escape-Sequenzen selbst. Bei \\d fällt das nicht auf, bei \\b (Backspace) schon.',
+      desc: 'In einem gewöhnlichen Python-String werden String-Escapes zuerst ausgewertet. Bei \\d bleibt der Backslash derzeit zwar erhalten, bei \\b entsteht aber ein Backspace-Zeichen.',
       py: 'print(len("\\b"))    # 1  -> Backspace-Zeichen\nprint(len(r"\\b"))   # 2  -> Backslash + b',
       tags: ['rawstring', 'falle']
     },
     {
       sym: 'sub mit "\\1"', title: 'Rückverweis im Ersatztext', cat: 'traps',
-      desc: 'Auch der Ersatzstring braucht ein r davor, sonst kommt \\1 nie bei re an.',
+      desc: 'Ein Rückverweis im Ersatztext sollte in einem Raw String stehen; sonst interpretiert Python etwa \\1 als Zeichen mit dem Oktalwert 1, bevor re den Text erhält.',
       py: 're.sub(r"(\\d)(\\w)", r"\\2\\1", text)   # richtig\nre.sub(r"(\\d)(\\w)", "\\2\\1", text)    # kaputt',
       tags: ['sub', 'rawstring', 'falle']
     },
@@ -802,12 +810,12 @@
     {
       sym: '(a+)+b', title: 'Katastrophales Backtracking', cat: 'traps',
       desc: 'Verschachtelte Quantifizierer über derselben Zeichenmenge lassen die Engine exponentiell viele Möglichkeiten durchprobieren. Bei langen Nicht-Treffern hängt das Programm.',
-      note: 'Faustregel: keine Quantifizierer um Gruppen, die selbst quantifiziert sind. Statt (\\s|\\t)+ lieber [\\s\\t]+.',
+      note: 'Warnsignal sind mehrdeutige verschachtelte Wiederholungen. Formuliere sie eindeutig; statt (\\s|\\t)+ reicht beispielsweise [\\s\\t]+.',
       tags: ['performance', 'redos', 'backtracking', 'falle']
     },
     {
       sym: 'a? mit findall', title: 'Leere Treffer', cat: 'traps',
-      desc: 'Muster, die auch nichts matchen können, liefern an jeder Position einen leeren String — die Liste ist plötzlich voller \'\'.',
+      desc: 'Muster, die auch nichts matchen können, liefern zusätzlich leere Treffer an Positionen, an denen der optionale Teil nichts verbraucht — häufig auch am Stringende.',
       pattern: 'a?', text: 'aaab', fn: 'findall',
       note: 'Meist ist + statt * bzw. ? gemeint.',
       tags: ['leer', 'quantifizierer', 'falle']

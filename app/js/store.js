@@ -17,28 +17,146 @@
     playground: null
   };
 
+  var VIEWS = ['learn', 'ref', 'play', 'train', 'quiz'];
+  var FUNCTIONS = ['findall', 'finditer', 'search', 'match', 'fullmatch', 'sub', 'split'];
+  var MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+
+  function freshDefault() {
+    var out = JSON.parse(JSON.stringify(DEFAULT));
+    out.solved = Object.create(null);
+    out.readLessons = Object.create(null);
+    out.quizDone = Object.create(null);
+    return out;
+  }
+
+  function isRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function fail(strict, message) {
+    if (strict) throw new Error(message);
+    return false;
+  }
+
+  function owns(record, key) {
+    return Object.prototype.hasOwnProperty.call(record, key);
+  }
+
+  function idsOf(list) {
+    var ids = Object.create(null);
+    (list || []).forEach(function (item) { ids[item.id] = true; });
+    return ids;
+  }
+
+  function booleanMap(value, label, validIds, strict) {
+    if (!isRecord(value)) {
+      fail(strict, label + ' muss ein Objekt sein.');
+      return Object.create(null);
+    }
+    var out = Object.create(null);
+    var valid = true;
+    Object.keys(value).forEach(function (id) {
+      if (!owns(validIds, id) || typeof value[id] !== 'boolean') {
+        valid = false;
+        return;
+      }
+      out[id] = value[id];
+    });
+    if (!valid) fail(strict, label + ' enthält unbekannte IDs oder nicht-boolesche Werte.');
+    return out;
+  }
+
+  function playgroundState(value, strict) {
+    if (value === null) return null;
+    if (!isRecord(value)) {
+      fail(strict, 'playground muss null oder ein Objekt sein.');
+      return null;
+    }
+    var fields = ['pattern', 'flags', 'fn', 'repl', 'text'];
+    for (var i = 0; i < fields.length; i++) {
+      if (typeof value[fields[i]] !== 'string') {
+        fail(strict, 'playground.' + fields[i] + ' muss Text sein.');
+        return null;
+      }
+    }
+    if (!/^[imsxa]*$/.test(value.flags) || new Set(value.flags).size !== value.flags.length) {
+      fail(strict, 'playground.flags enthält ungültige oder doppelte Flags.');
+      return null;
+    }
+    if (FUNCTIONS.indexOf(value.fn) === -1) {
+      fail(strict, 'playground.fn ist keine unterstützte re-Funktion.');
+      return null;
+    }
+    if (value.pattern.length > 10000 || value.repl.length > 100000 || value.text.length > 1000000) {
+      fail(strict, 'Die Playground-Daten sind zu groß.');
+      return null;
+    }
+    return {
+      pattern: value.pattern, flags: value.flags, fn: value.fn,
+      repl: value.repl, text: value.text
+    };
+  }
+
+  function normalize(value, strict) {
+    if (!isRecord(value)) {
+      fail(strict, 'Der Import muss ein JSON-Objekt sein.');
+      return freshDefault();
+    }
+    if (strict && !Object.keys(DEFAULT).some(function (key) { return value[key] !== undefined; })) {
+      throw new Error('Das JSON enthält keinen Regex-Trainer-Fortschritt.');
+    }
+
+    var out = freshDefault();
+    var lessonIds = idsOf(RT.lessons);
+    var exerciseIds = idsOf(RT.exercises);
+    var quizIds = idsOf(RT.quiz);
+    var levelIds = idsOf(RT.levels);
+
+    if (value.theme === null || value.theme === 'dark' || value.theme === 'light') out.theme = value.theme;
+    else if (value.theme !== undefined) fail(strict, 'theme muss null, "dark" oder "light" sein.');
+
+    if (value.solved !== undefined) out.solved = booleanMap(value.solved, 'solved', exerciseIds, strict);
+    if (value.readLessons !== undefined) out.readLessons = booleanMap(value.readLessons, 'readLessons', lessonIds, strict);
+    if (value.quizDone !== undefined) out.quizDone = booleanMap(value.quizDone, 'quizDone', quizIds, strict);
+
+    if (value.lastView === undefined || VIEWS.indexOf(value.lastView) !== -1) out.lastView = value.lastView || out.lastView;
+    else fail(strict, 'lastView enthält keine bekannte Ansicht.');
+
+    if (value.lastLesson === null || value.lastLesson === undefined || owns(lessonIds, value.lastLesson)) {
+      out.lastLesson = value.lastLesson === undefined ? out.lastLesson : value.lastLesson;
+    } else fail(strict, 'lastLesson enthält keine bekannte Kapitel-ID.');
+
+    if (value.lastLevel === undefined || (typeof value.lastLevel === 'number' && owns(levelIds, value.lastLevel))) {
+      out.lastLevel = value.lastLevel || out.lastLevel;
+    }
+    else fail(strict, 'lastLevel enthält keine bekannte Stufe.');
+
+    if (value.playground !== undefined) out.playground = playgroundState(value.playground, strict);
+    return out;
+  }
+
   var data = load();
 
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (!raw) return JSON.parse(JSON.stringify(DEFAULT));
-      var parsed = JSON.parse(raw);
-      Object.keys(DEFAULT).forEach(function (k) {
-        if (parsed[k] === undefined) parsed[k] = JSON.parse(JSON.stringify(DEFAULT[k]));
-      });
-      return parsed;
+      if (!raw || raw.length > MAX_IMPORT_BYTES) return freshDefault();
+      return normalize(JSON.parse(raw), false);
     } catch (e) {
-      return JSON.parse(JSON.stringify(DEFAULT));
+      return freshDefault();
     }
   }
 
   var saveTimer = null;
+  function saveNow() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* z.B. privater Modus */ }
+  }
+
   function save() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* z.B. privater Modus */ }
-    }, 120);
+    saveTimer = setTimeout(saveNow, 120);
   }
 
   RT.store = {
@@ -46,42 +164,60 @@
     get: function (k) { return data[k]; },
     set: function (k, v) { data[k] = v; save(); },
 
-    isSolved: function (id) { return !!data.solved[id]; },
+    isSolved: function (id) { return owns(data.solved, id) && data.solved[id] === true; },
     markSolved: function (id) { data.solved[id] = true; save(); },
 
-    isRead: function (id) { return !!data.readLessons[id]; },
+    isRead: function (id) { return owns(data.readLessons, id) && data.readLessons[id] === true; },
     markRead: function (id) { data.readLessons[id] = true; save(); },
 
     quizAnswer: function (id, correct) { data.quizDone[id] = !!correct; save(); },
-    quizResult: function (id) { return data.quizDone[id]; },
+    quizResult: function (id) { return owns(data.quizDone, id) ? data.quizDone[id] : undefined; },
+    isQuizAttempted: function (id) { return owns(data.quizDone, id); },
+
+    exportJSON: function () {
+      return JSON.stringify(data, null, 2);
+    },
+
+    importJSON: function (raw) {
+      if (typeof raw !== 'string' || raw.length > MAX_IMPORT_BYTES) throw new Error('Die Importdatei ist ungültig oder zu groß.');
+      var parsed = JSON.parse(raw);
+      var imported = normalize(parsed, true);
+      data = imported;
+      saveNow();
+    },
 
     levelProgress: function (levelId) {
       var all = RT.exercises.filter(function (e) { return e.level === levelId; });
-      var done = all.filter(function (e) { return !!data.solved[e.id]; });
+      var done = all.filter(function (e) { return owns(data.solved, e.id) && data.solved[e.id] === true; });
       return { done: done.length, total: all.length };
     },
 
     overall: function () {
       var exTotal = RT.exercises.length;
-      var exDone = RT.exercises.filter(function (e) { return !!data.solved[e.id]; }).length;
+      var exDone = RT.exercises.filter(function (e) { return owns(data.solved, e.id) && data.solved[e.id] === true; }).length;
       var leTotal = RT.lessons.length;
-      var leDone = RT.lessons.filter(function (l) { return !!data.readLessons[l.id]; }).length;
+      var leDone = RT.lessons.filter(function (l) { return owns(data.readLessons, l.id) && data.readLessons[l.id] === true; }).length;
       var quTotal = RT.quiz.length;
-      var quDone = RT.quiz.filter(function (q) { return data.quizDone[q.id] === true; }).length;
+      var quDone = RT.quiz.filter(function (q) { return owns(data.quizDone, q.id) && data.quizDone[q.id] === true; }).length;
+      var quAttempted = RT.quiz.filter(function (q) { return owns(data.quizDone, q.id); }).length;
       var total = exTotal + leTotal + quTotal;
       var done = exDone + leDone + quDone;
       return {
         pct: total ? Math.round(done / total * 100) : 0,
         exDone: exDone, exTotal: exTotal,
         leDone: leDone, leTotal: leTotal,
-        quDone: quDone, quTotal: quTotal
+        quDone: quDone, quTotal: quTotal,
+        quAttempted: quAttempted
       };
     },
 
     reset: function () {
-      data = JSON.parse(JSON.stringify(DEFAULT));
-      data.theme = null;
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      data = freshDefault();
       try { localStorage.removeItem(KEY); } catch (e) {}
-    }
+    },
+
+    flush: saveNow
   };
 })(window);

@@ -32,17 +32,62 @@
       .replace(/"/g, '&quot;');
   }
 
+  function debounce(fn, ms) {
+    var timer = null;
+    function debounced() {
+      var self = this, args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(self, args); }, ms);
+    }
+    debounced.cancel = function () {
+      clearTimeout(timer);
+      timer = null;
+    };
+    return debounced;
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { toast('Kopiert'); },
+        function () { fallbackCopy(text); });
+    }
+    fallbackCopy(text);
+    return Promise.resolve();
+  }
+
+  function fallbackCopy(text) {
+    var ta = el('textarea', { style: 'position:fixed;left:-9999px;top:0;opacity:0' });
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      toast('Kopiert');
+    } catch (e) {
+      toast('Kopieren nicht möglich');
+    }
+    document.body.removeChild(ta);
+  }
+
+  function modKeyLabel() {
+    return /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Strg';
+  }
+
   /* ---------- Treffer im Text markieren ---------- */
   function highlightHTML(text, matches) {
     if (!matches || !matches.length) return esc(text) + '\n';
     var out = '', pos = 0;
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      if (m.start < pos) continue;
-      out += esc(text.slice(pos, m.start));
+      /* Engine-Positionen folgen Python (Unicode-Codepoints). Zum
+         Ausschneiden im DOM brauchen wir dagegen UTF-16-Indizes. */
+      var start = m.startCU !== undefined ? m.startCU : m.start;
+      var end = m.endCU !== undefined ? m.endCU : m.end;
+      if (start < pos) continue;
+      out += esc(text.slice(pos, start));
       var cls = 'hit' + (i % 2 ? ' alt' : '') + (m.text === '' ? ' empty' : '');
       out += '<mark class="' + cls + '">' + esc(m.text) + '</mark>';
-      pos = m.end;
+      pos = end;
     }
     out += esc(text.slice(pos));
     return out + '\n';   // Abschluss-Newline hält die Höhe stabil
@@ -52,6 +97,25 @@
      Textarea mit unsichtbarer Schrift über einer Ebene, auf der
      die Treffer markiert werden. Beide teilen dieselbe Typografie. */
   var editors = [];   // für Nachmessen bei Größenänderung
+  var disposables = [];
+
+  function onDispose(node, fn) {
+    disposables.push({ node: node, fn: fn });
+  }
+
+  function disposeWithin(root) {
+    if (!root) return;
+    disposables = disposables.filter(function (d) {
+      if (d.node === root || (root.contains && root.contains(d.node))) {
+        try { d.fn(); } catch (e) { /* Aufräumen darf Navigation nie blockieren. */ }
+        return false;
+      }
+      return true;
+    });
+    editors.slice().forEach(function (editor) {
+      if (editor.node === root || (root.contains && root.contains(editor.node))) editor.destroy();
+    });
+  }
 
   function makeEditor(opts) {
     opts = opts || {};
@@ -59,7 +123,8 @@
     var front = el('textarea', {
       class: 'ta-front', spellcheck: 'false', rows: '1',
       autocapitalize: 'off', autocorrect: 'off',
-      placeholder: opts.placeholder || ''
+      placeholder: opts.placeholder || '',
+      'aria-label': opts.ariaLabel || 'Testtext'
     });
     var wrap = el('div', { class: 'ta-wrap' + (opts.small ? ' sm' : '') }, [back, front]);
 
@@ -74,17 +139,23 @@
       back.innerHTML = highlightHTML(front.value, matches);
       grow();
     }
-    front.addEventListener('input', function () {
+    function onInput() {
       grow();
       if (opts.onInput) opts.onInput(front.value);
-    });
+    }
+    front.addEventListener('input', onInput);
 
     var api = {
       node: wrap, input: front,
       get: function () { return front.value; },
       set: function (v) { front.value = v; grow(); },
       paint: paint,
-      grow: grow
+      grow: grow,
+      destroy: function () {
+        front.removeEventListener('input', onInput);
+        var i = editors.indexOf(api);
+        if (i !== -1) editors.splice(i, 1);
+      }
     };
     editors.push(api);
     return api;
@@ -93,6 +164,9 @@
   /* Nach Layoutwechseln (Fenstergröße, Ansichtswechsel) alle Felder nachmessen */
   var regrowTimer = null;
   function regrowAll() {
+    editors = editors.filter(function (e) {
+      return typeof e.node.isConnected !== 'boolean' || e.node.isConnected;
+    });
     editors.forEach(function (e) { e.grow(); });
   }
   window.addEventListener('resize', function () {
@@ -109,19 +183,24 @@
     a: 're.A — \\w \\d \\b nur ASCII'
   };
 
-  function makeFlags(active, onChange, which) {
+  function makeFlags(active, onChange, which, label) {
     var list = (which || 'imsxa').split('');
     var state = { v: active || '' };
-    var wrap = el('div', { class: 'flags' });
+    var wrap = el('div', { class: 'flags', role: 'group', 'aria-label': label || 'Regex-Flags' });
     list.forEach(function (f) {
+      var on = state.v.indexOf(f) !== -1;
       var b = el('button', {
-        class: 'flag' + (state.v.indexOf(f) !== -1 ? ' on' : ''),
-        type: 'button', title: FLAG_TITLES[f], text: f
+        class: 'flag' + (on ? ' on' : ''),
+        type: 'button', title: FLAG_TITLES[f], text: f,
+        'aria-label': f,
+        'aria-pressed': on ? 'true' : 'false'
       });
       b.addEventListener('click', function () {
         if (state.v.indexOf(f) !== -1) state.v = state.v.replace(f, '');
         else state.v += f;
-        b.classList.toggle('on');
+        var isOn = state.v.indexOf(f) !== -1;
+        b.classList.toggle('on', isOn);
+        b.setAttribute('aria-pressed', isOn ? 'true' : 'false');
         onChange(state.v);
       });
       wrap.appendChild(b);
@@ -132,18 +211,22 @@
       set: function (v) {
         state.v = v || '';
         $$('.flag', wrap).forEach(function (b) {
-          b.classList.toggle('on', state.v.indexOf(b.textContent) !== -1);
+          var isOn = state.v.indexOf(b.textContent) !== -1;
+          b.classList.toggle('on', isOn);
+          b.setAttribute('aria-pressed', isOn ? 'true' : 'false');
         });
       }
     };
   }
 
   /* ---------- Regex-Eingabefeld mit r"…" ---------- */
-  function makeRegexInput(value, onInput, placeholder) {
+  function makeRegexInput(value, onInput, placeholder, label) {
     var inp = el('input', {
       class: 'input', type: 'text', spellcheck: 'false',
       autocapitalize: 'off', autocorrect: 'off',
-      placeholder: placeholder || 'Muster eingeben …', value: value || ''
+      maxlength: '10000',
+      placeholder: placeholder || 'Muster eingeben …', value: value || '',
+      'aria-label': label || 'Regulärer Ausdruck'
     });
     inp.addEventListener('input', function () { onInput(inp.value); });
     var wrap = el('div', { class: 'rx-wrap' }, [
@@ -210,7 +293,7 @@
   var toastNode = null, toastTimer = null;
   function toast(msg) {
     if (!toastNode) {
-      toastNode = el('div', { class: 'toast' });
+      toastNode = el('div', { class: 'toast', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
       document.body.appendChild(toastNode);
     }
     toastNode.textContent = msg;
@@ -226,6 +309,133 @@
     ['match', 'match'], ['fullmatch', 'fullmatch'], ['sub', 'sub'], ['split', 'split']
   ];
 
+  /* ---------- Abbrechbare Regex-Auswertung ----------
+     Nutzereingaben laufen in einem Worker. So kann ein Muster mit
+     extremem Backtracking nicht den UI-Thread festhalten. file://
+     bleibt als bewusst synchroner Kompatibilitätsmodus erhalten. */
+  var SAFE_TIMEOUT = 600;
+  var safeWorker = null;
+  var safeSeq = 0;
+  var safePending = {};
+  var safeWorkerURL = null;
+
+  try {
+    var coreSrc = document.currentScript && document.currentScript.src;
+    if (coreSrc) safeWorkerURL = new URL('regex-worker.js', coreSrc).href;
+  } catch (e) { safeWorkerURL = null; }
+
+  function timeoutResult(ms) {
+    return {
+      ok: false,
+      timeout: true,
+      error: 'Auswertung nach ' + ms + ' ms abgebrochen. Das Muster verursacht wahrscheinlich starkes Backtracking.'
+    };
+  }
+
+  function workerErrorResult() {
+    return { ok: false, error: 'Die geschützte Regex-Auswertung konnte nicht gestartet werden.' };
+  }
+
+  function stopSafeWorker(resultFactory) {
+    if (safeWorker) safeWorker.terminate();
+    safeWorker = null;
+    Object.keys(safePending).forEach(function (id) {
+      var pending = safePending[id];
+      clearTimeout(pending.timer);
+      delete safePending[id];
+      pending.resolve(pending.jobs.map(resultFactory));
+    });
+  }
+
+  function restartSafeWorkerAfterTimeout(timedOutId, ms) {
+    if (safeWorker) safeWorker.terminate();
+    safeWorker = null;
+    var retry = [];
+    Object.keys(safePending).forEach(function (id) {
+      var pending = safePending[id];
+      clearTimeout(pending.timer);
+      delete safePending[id];
+      if (String(id) === String(timedOutId)) {
+        pending.resolve(pending.jobs.map(function () { return timeoutResult(ms); }));
+      } else {
+        retry.push(pending);
+      }
+    });
+    /* Neuere Eingaben hingen nur hinter dem problematischen Auftrag in
+       derselben Worker-Queue. Sie werden auf einem frischen Worker erneut
+       ausgeführt, statt fälschlich ebenfalls als Timeout zu enden. */
+    retry.forEach(function (pending) {
+      safeBatch(pending.jobs, { timeout: pending.timeout }).then(pending.resolve);
+    });
+  }
+
+  function ensureSafeWorker() {
+    if (safeWorker) return true;
+    if (!safeWorkerURL || !global.Worker || (global.location && global.location.protocol === 'file:')) return false;
+    try {
+      safeWorker = new global.Worker(safeWorkerURL);
+      safeWorker.addEventListener('message', function (event) {
+        var msg = event.data || {};
+        var pending = safePending[msg.id];
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        delete safePending[msg.id];
+        pending.resolve(Array.isArray(msg.results) ? msg.results : pending.jobs.map(workerErrorResult));
+      });
+      safeWorker.addEventListener('error', function () {
+        stopSafeWorker(workerErrorResult);
+      });
+      return true;
+    } catch (e) {
+      safeWorker = null;
+      return false;
+    }
+  }
+
+  function syncBatch(jobs) {
+    return jobs.map(function (job) {
+      try {
+        return E.run(job.pattern, job.flags || '', job.text || '', job.fn || 'findall', job.extra || {});
+      } catch (error) {
+        return { ok: false, error: 'Die Regex-Auswertung ist unerwartet fehlgeschlagen.' };
+      }
+    });
+  }
+
+  function safeBatch(jobs, opts) {
+    jobs = Array.isArray(jobs) ? jobs : [];
+    opts = opts || {};
+    if (!jobs.length) return Promise.resolve([]);
+    if (!ensureSafeWorker()) {
+      /* Worker von file:// ist browserabhängig bzw. meist gesperrt.
+         Der beworbene Direktstart behält daher die volle Funktion. */
+      return Promise.resolve().then(function () { return syncBatch(jobs); });
+    }
+
+    var id = ++safeSeq;
+    var ms = Math.max(100, Number(opts.timeout) || SAFE_TIMEOUT);
+    return new Promise(function (resolve) {
+      var timer = setTimeout(function () {
+        if (!safePending[id]) return;
+        restartSafeWorkerAfterTimeout(id, ms);
+      }, ms);
+      safePending[id] = { resolve: resolve, timer: timer, jobs: jobs, timeout: ms };
+      try {
+        safeWorker.postMessage({ id: id, jobs: jobs });
+      } catch (e) {
+        clearTimeout(timer);
+        delete safePending[id];
+        resolve(jobs.map(workerErrorResult));
+        stopSafeWorker(workerErrorResult);
+      }
+    });
+  }
+
+  function safeRun(pattern, flags, text, fn, extra, opts) {
+    return safeBatch([{ pattern: pattern, flags: flags, text: text, fn: fn, extra: extra }], opts)
+      .then(function (results) { return results[0]; });
+  }
+
   function makeDemo(cfg) {
     cfg = cfg || {};
     var state = {
@@ -235,22 +445,25 @@
       repl: cfg.repl !== undefined ? cfg.repl : ''
     };
 
-    var rx = makeRegexInput(state.pattern, function (v) { state.pattern = v; render(); });
-    var flags = makeFlags(state.flags, function (v) { state.flags = v; render(); });
+    var alive = true;
+    var renderSeq = 0;
+    var rx = makeRegexInput(state.pattern, function (v) { state.pattern = v; requestRender(); }, '', 'Regulärer Ausdruck im Beispiel');
+    var flags = makeFlags(state.flags, function (v) { state.flags = v; requestRender(); }, null, 'Regex-Flags im Beispiel');
 
-    var fnSel = el('select', { class: 'select' },
+    var fnSel = el('select', { class: 'select', 'aria-label': 'Regex-Funktion im Beispiel' },
       FN_LABELS.map(function (f) {
         return el('option', { value: f[0], selected: f[0] === state.fn ? '' : null, text: 're.' + f[1] });
       })
     );
     fnSel.value = state.fn;
-    fnSel.addEventListener('change', function () { state.fn = fnSel.value; syncRepl(); render(); });
+    fnSel.addEventListener('change', function () { state.fn = fnSel.value; syncRepl(); requestRender(); });
 
     var replInp = el('input', {
       class: 'input', type: 'text', spellcheck: 'false',
-      placeholder: 'Ersatztext', value: state.repl
+      placeholder: 'Ersatztext', value: state.repl,
+      'aria-label': 'Ersatztext im Beispiel'
     });
-    replInp.addEventListener('input', function () { state.repl = replInp.value; render(); });
+    replInp.addEventListener('input', function () { state.repl = replInp.value; requestRender(); });
     var replWrap = el('div', { class: 'rx-wrap', style: 'display:none;flex:1 1 140px;min-width:0' }, [
       el('span', { class: 'rx-fix l', text: '→' }), replInp, el('span', { class: 'rx-fix r', text: '"' })
     ]);
@@ -267,17 +480,17 @@
 
     var bar = el('div', { class: 'demo-bar' }, [rx.node, replWrap, flags.node, fnSel, openBtn]);
 
-    var ed = makeEditor({ small: true, onInput: render });
-    var out = el('div', { class: 'result' });
+    var ed = makeEditor({ small: true, onInput: requestRender, ariaLabel: 'Testtext im Beispiel' });
+    var out = el('div', { class: 'result', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
     var meta = el('div', { class: 'meta' });
     var body = el('div', { class: 'demo-body' }, [ed.node, out, meta]);
 
     var root = el('div', { class: 'demo' }, [bar, body]);
     if (cfg.cap) root.appendChild(el('div', { class: 'demo-cap', text: cfg.cap }));
 
-    function render() {
-      var text = ed.get();
-      var res = E.run(state.pattern, state.flags, text, state.fn, { repl: state.repl });
+    function paintResult(res) {
+      if (!alive) return;
+      out.setAttribute('aria-busy', 'false');
       if (!res.ok) {
         ed.paint([]);
         out.className = 'result bad';
@@ -294,9 +507,44 @@
       meta.innerHTML = bits.join('');
     }
 
+    function snapshot() {
+      return { pattern: state.pattern, flags: state.flags, text: ed.get(), fn: state.fn, repl: state.repl };
+    }
+
+    function renderSync() {
+      var s = snapshot();
+      renderSeq++;
+      paintResult(E.run(s.pattern, s.flags, s.text, s.fn, { repl: s.repl }));
+    }
+
+    function renderAsync() {
+      var seq = renderSeq;
+      var s = snapshot();
+      out.setAttribute('aria-busy', 'true');
+      safeRun(s.pattern, s.flags, s.text, s.fn, { repl: s.repl }).then(function (res) {
+        if (!alive || seq !== renderSeq) return;
+        paintResult(res);
+      });
+    }
+
+    var render = debounce(renderAsync, 90);
+
+    function requestRender() {
+      renderSeq++;
+      ed.paint([]);
+      out.setAttribute('aria-busy', 'true');
+      render();
+    }
+
     ed.set(cfg.text || '');
-    render();
+    renderSync();
     requestAnimationFrame(function () { ed.grow(); });
+    onDispose(root, function () {
+      alive = false;
+      renderSeq++;
+      render.cancel();
+      ed.destroy();
+    });
     return root;
   }
 
@@ -315,16 +563,18 @@
     empty:  '<circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 9h.01M9 15h6"/>'
   };
   function icon(name) {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false" ' +
            'stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>';
   }
 
   RT.ui = {
     $: $, $$: $$, el: el, esc: esc, icon: icon, toast: toast,
+    debounce: debounce, copyText: copyText, modKeyLabel: modKeyLabel,
     highlightHTML: highlightHTML,
     makeEditor: makeEditor, makeFlags: makeFlags, makeRegexInput: makeRegexInput,
-    regrowAll: regrowAll,
+    regrowAll: regrowAll, onDispose: onDispose, disposeWithin: disposeWithin,
     makeDemo: makeDemo, pyCode: pyCode,
     FN_LABELS: FN_LABELS
   };
+  RT.safeRun = { run: safeRun, batch: safeBatch, timeout: SAFE_TIMEOUT };
 })(window);

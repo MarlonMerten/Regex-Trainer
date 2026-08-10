@@ -84,6 +84,15 @@ eq('\\A trotz re.M', fa('\\AZeile', 'Zeile 1\nZeile 2', 'm'), ['Zeile']);
 eq('{,m} == {0,m}', fa('a{,3}', 'aaaa'), fa('a{0,3}', 'aaaa'));
 eq('{,3} auf "aaaa"', fa('a{,3}', 'aaaa'), ['aaa', 'a', '']);
 
+console.log('\n=== 2b · re.escape / re.L ===');
+eq('re.escape Metazeichen', E.escape('a.b*'), 'a\\.b\\*');
+eq('re.escape wörtlich', fa(E.escape('100%'), 'Rabatt 100% jetzt'), ['100%']);
+checks++;
+var lc = E.compile('\\w+', 'L');
+if (!lc.ok || !lc.warnings.some(function (w) { return w.indexOf('re.L') !== -1; })) {
+  fails++; console.log('  ✗ re.L sollte eine Warnung auslösen');
+}
+
 console.log('\n=== 2 · Identitäts-Escapes bleiben im Unicode-Modus ===');
 [['\\-\\d+', 'Wert -42 hier', ['-42']],
  ['100\\%', 'Rabatt 100% jetzt', ['100%']],
@@ -200,13 +209,25 @@ console.log('\n=== 11 · Tokenizer verliert keine Zeichen ===');
 ['\\b(?P<x>\\d{2,3})[.,]?\\s*(?:€|Euro)\\b',
  '^(?=.*[A-Z])(?=.*\\d).{8,}$',
  '(?<=[.!?])\\s+(?=[A-Z])',
- '[\\w.+-]+@[\\w-]+\\.[\\w.]+'
+ '[\\w.+-]+@[\\w-]+\\.[\\w.]+',
+ '\\z(?P=name)\\k<name>',
+ '(?P<grüße>a)(?P=grüße)'
 ].forEach(p => {
   checks++;
   const joined = RT.explain.tokenize(p).map(t => t.raw).join('');
   if (joined !== p) { fails++; console.log(`  ✗ ${p}\n      wurde zu ${joined}`); }
 });
-console.log('  4 Muster zerlegt');
+eq('Explainer erkennt \\z', RT.explain.tokenize('\\z')[0].kind, 'anchor');
+eq('Explainer erkennt Python-Namensrückverweis', RT.explain.tokenize('(?P=x)')[0].kind, 'ref');
+eq('Explainer markiert \\k als Nicht-Python', RT.explain.tokenize('\\k<x>')[0].kind, 'err');
+const longExplainPattern = '('.repeat(10000);
+const explainStart = Date.now();
+const longExplainTokens = RT.explain.tokenize(longExplainPattern);
+checks++;
+if (Date.now() - explainStart > 1000 || longExplainTokens.map(t => t.raw).join('') !== longExplainPattern) {
+  fails++; console.log('  ✗ Explainer muss 10.000 Zeichen linear und verlustfrei zerlegen');
+}
+console.log('  10 Muster/Explainer-Eigenschaften zerlegt');
 
 console.log('\n' + '='.repeat(62));
 console.log(fails === 0 ? `ALLES GRÜN  (${checks} Prüfungen)` : `${fails} FEHLER von ${checks} Prüfungen`);

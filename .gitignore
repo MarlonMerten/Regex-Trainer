@@ -12,3 +12,8 @@ Praktikum_*.ipynb
 
 # Deployment-Archiv
 code.tar.gz
+
+# Lokale Testwerkzeuge und Browser-Artefakte
+node_modules/
+test-results/
+playwright-report/

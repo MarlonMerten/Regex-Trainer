@@ -6,10 +6,11 @@
   var RT = global.RT, U = RT.ui, el = U.el;
 
   var root, navBox, body, current = 0;
+  var pendingRoute = null;
 
   function build(container) {
     root = container;
-    navBox = el('nav', { class: 'learn-nav' });
+    navBox = el('nav', { class: 'learn-nav', 'aria-label': 'Kapitel' });
     body = el('article', { class: 'lesson' });
     root.appendChild(el('div', { class: 'page-head' }, [
       el('h1', { text: 'Lernpfad' }),
@@ -17,12 +18,26 @@
     ]));
     root.appendChild(el('div', { class: 'learn-grid' }, [navBox, body]));
     renderNav();
-    open(RT.store.get('lastLesson') !== null ? indexOf(RT.store.get('lastLesson')) : 0);
+    if (pendingRoute) {
+      open(indexOf(pendingRoute));
+      pendingRoute = null;
+    } else {
+      open(RT.store.get('lastLesson') !== null ? indexOf(RT.store.get('lastLesson')) : 0);
+    }
   }
 
   function indexOf(id) {
     for (var i = 0; i < RT.lessons.length; i++) if (RT.lessons[i].id === id) return i;
     return 0;
+  }
+
+  function openRoute(sub) {
+    if (!sub) return;
+    if (!navBox) {
+      pendingRoute = sub;
+      return;
+    }
+    open(indexOf(sub));
   }
 
   function renderNav() {
@@ -31,7 +46,8 @@
       var b = el('button', {
         type: 'button',
         class: (i === current ? 'on ' : '') + (RT.store.isRead(l.id) ? 'done' : ''),
-        text: l.title
+        text: l.title,
+        'aria-current': i === current ? 'step' : 'false'
       });
       b.addEventListener('click', function () { open(i); });
       ol.appendChild(el('li', null, b));
@@ -44,16 +60,29 @@
     current = Math.max(0, Math.min(i, RT.lessons.length - 1));
     var l = RT.lessons[current];
     RT.store.set('lastLesson', l.id);
-    RT.store.markRead(l.id);
+    RT.setRoute('learn', l.id);
     renderNav();
     renderLesson(l);
-    RT.refreshProgress();
+    requestAnimationFrame(function () {
+      var heading = body && body.querySelector('h2');
+      if (heading) {
+        heading.setAttribute('tabindex', '-1');
+        heading.focus({ preventScroll: true });
+      }
+    });
     if (root.getBoundingClientRect().top < -40) {
       window.scrollTo({ top: root.offsetTop - 70, behavior: 'smooth' });
     }
   }
 
+  function finishLesson(l) {
+    RT.store.markRead(l.id);
+    RT.refreshProgress();
+    renderNav();
+  }
+
   function renderLesson(l) {
+    U.disposeWithin(body);
     body.innerHTML = '';
     body.appendChild(el('header', { class: 'lesson-head' }, [
       el('span', { class: 'tag', text: 'Kapitel ' + (current + 1) + ' · ' + l.minutes + ' Min' }),
@@ -69,6 +98,7 @@
     var next = el('button', { class: 'btn primary', type: 'button', html: 'Weiter &nbsp;&rarr;' });
     prev.addEventListener('click', function () { open(current - 1); });
     next.addEventListener('click', function () {
+      finishLesson(l);
       if (current === RT.lessons.length - 1) RT.go('train');
       else open(current + 1);
     });
@@ -113,5 +143,9 @@
   }
 
   RT.views = RT.views || {};
-  RT.views.learn = { build: build, refresh: function () { renderNav(); } };
+  RT.views.learn = {
+    build: build,
+    openRoute: openRoute,
+    refresh: function () { renderNav(); }
+  };
 })(window);

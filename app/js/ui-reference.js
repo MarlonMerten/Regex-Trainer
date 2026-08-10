@@ -9,8 +9,16 @@
   var activeCat = 'all';
   var query = '';
   var openIds = {};
+  var pendingRoute = null;
+  var routedKey = null;
+  var routeLookup = {};
+  var routesByKey = {};
 
   function build(container) {
+    activeCat = 'all';
+    query = '';
+    routedKey = null;
+    openIds = {};
     container.appendChild(el('div', { class: 'page-head' }, [
       el('h1', { text: 'Nachschlagen' }),
       el('p', { text: 'Jedes Syntaxelement, jeder re-Befehl und die typischen Rezepte — mit lauffähigem Beispiel. Suche nach Zeichen („\\b“), nach Begriff („Wortgrenze“) oder nach Zweck („E-Mail“).' })
@@ -18,21 +26,119 @@
 
     searchInput = el('input', {
       class: 'input', type: 'search', spellcheck: 'false',
-      placeholder: 'Suchen … z. B. \\d, Lookahead, findall, Geldbetrag'
+      placeholder: 'Suchen … z. B. \\d, Lookahead, findall, Geldbetrag',
+      'aria-label': 'Regex-Nachschlagewerk durchsuchen'
     });
-    searchInput.addEventListener('input', function () { query = searchInput.value.trim().toLowerCase(); render(); });
+    searchInput.addEventListener('input', function () {
+      routedKey = null;
+      RT.setRoute('ref', null);
+      query = searchInput.value.trim().toLowerCase();
+      render();
+    });
 
     var searchWrap = el('div', { class: 'search-wrap' }, [
-      el('span', { html: U.icon('search') }),
+      el('span', { html: U.icon('search'), 'aria-hidden': 'true' }),
       searchInput,
-      el('span', { class: 'search-kbd', text: '⌘K' })
+      el('span', { class: 'search-kbd', text: U.modKeyLabel() + 'K' })
     ]);
     container.appendChild(searchWrap);
 
-    sideBox = el('aside', { class: 'ref-side' });
-    listBox = el('div', { class: 'ref-list' });
+    sideBox = el('aside', { class: 'ref-side', 'aria-label': 'Kategorien' });
+    listBox = el('div', { class: 'ref-list', 'aria-label': 'Suchergebnisse' });
     container.appendChild(el('div', { class: 'ref-layout' }, [sideBox, listBox]));
 
+    buildRoutes();
+    renderSide();
+    if (pendingRoute) {
+      openRoute(pendingRoute);
+      pendingRoute = null;
+    } else {
+      render();
+    }
+  }
+
+  function slugPart(text) {
+    var normalized = String(text).normalize ? String(text).normalize('NFKD') : String(text);
+    return normalized.toLowerCase().replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'eintrag';
+  }
+
+  function symSlug(sym) {
+    return String(sym).replace(/[^\w.+()-]+/g, '-').replace(/^-|-$/g, '') || 'entry';
+  }
+
+  function shortHash(text) {
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  function buildRoutes() {
+    routeLookup = {};
+    routesByKey = {};
+    var used = {};
+    RT.reference.forEach(function (entry, index) {
+      var seed = entry.cat + '|' + entry.sym + '|' + entry.title;
+      var base = entry.cat + '-' + slugPart(entry.title) + '-' + shortHash(seed);
+      var route = base;
+      var n = 2;
+      while (used[route]) route = base + '-' + n++;
+      used[route] = true;
+      routeLookup[route] = entry;
+      routesByKey[keyOf(entry, index)] = route;
+    });
+  }
+
+  function routeOf(entry) {
+    return routesByKey[keyOf(entry)] || null;
+  }
+
+  function findByRoute(sub) {
+    if (routeLookup[sub]) return routeLookup[sub];
+    var exact = RT.reference.filter(function (r) { return r.sym === sub; });
+    if (exact.length === 1) return exact[0];
+    var legacy = RT.reference.filter(function (r) { return symSlug(r.sym) === sub; });
+    if (legacy.length === 1) return legacy[0];
+    return null;
+  }
+
+  function openRoute(sub) {
+    if (!listBox) {
+      pendingRoute = sub;
+      return;
+    }
+    if (!sub) {
+      routedKey = null;
+      openIds = {};
+      activeCat = 'all';
+      query = '';
+      if (searchInput) searchInput.value = '';
+      renderSide();
+      render();
+      return;
+    }
+    var entry = findByRoute(sub);
+    if (entry) {
+      activeCat = 'all';
+      query = '';
+      routedKey = keyOf(entry);
+      if (searchInput) searchInput.value = '';
+      renderSide();
+      openIds[keyOf(entry)] = true;
+      render();
+      setTimeout(function () {
+        var items = U.$$('.ref-item', listBox);
+        if (items[0]) items[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+      return;
+    }
+    routedKey = null;
+    query = sub.toLowerCase();
+    if (searchInput) searchInput.value = sub;
+    activeCat = 'all';
     renderSide();
     render();
   }
@@ -49,13 +155,16 @@
     var cats = [{ id: 'all', label: 'Alles', hint: '' }].concat(RT.categories);
     cats.forEach(function (cat) {
       var b = el('button', {
-        type: 'button', class: 'ref-cat' + (cat.id === activeCat ? ' on' : ''), title: cat.hint || ''
+        type: 'button', class: 'ref-cat' + (cat.id === activeCat ? ' on' : ''), title: cat.hint || '',
+        'aria-pressed': cat.id === activeCat ? 'true' : 'false'
       }, [
         el('span', { text: cat.label }),
         el('span', { class: 'n', text: String(c[cat.id] || 0) })
       ]);
       b.addEventListener('click', function () {
         activeCat = cat.id;
+        routedKey = null;
+        RT.setRoute('ref', null);
         renderSide();
         render();
       });
@@ -64,6 +173,7 @@
   }
 
   function matches(entry) {
+    if (routedKey) return keyOf(entry) === routedKey;
     if (activeCat !== 'all' && entry.cat !== activeCat) return false;
     if (!query) return true;
     var hay = [
@@ -96,14 +206,22 @@
     setTimeout(function () { listBox.classList.remove('stagger'); }, 700);
   }
 
-  function keyOf(entry) { return entry.cat + '|' + entry.sym; }
+  function keyOf(entry, knownIndex) {
+    var index = typeof knownIndex === 'number' ? knownIndex : RT.reference.indexOf(entry);
+    return index + '|' + entry.cat + '|' + entry.sym + '|' + entry.title;
+  }
 
   function renderItem(entry) {
     var id = keyOf(entry);
     var isOpen = !!openIds[id] || (!!query && query.length > 2);
     var catLabel = (RT.categories.filter(function (c) { return c.id === entry.cat; })[0] || {}).label || '';
 
-    var head = el('button', { type: 'button', class: 'ref-head' }, [
+    var route = routeOf(entry);
+    var bodyId = 'ref-body-' + route;
+    var head = el('button', {
+      type: 'button', class: 'ref-head',
+      'aria-expanded': isOpen ? 'true' : 'false', 'aria-controls': bodyId
+    }, [
       el('span', { class: 'ref-sym', text: entry.sym }),
       el('span', { class: 'ref-title', text: entry.title }),
       el('span', { class: 'ref-sub', text: catLabel })
@@ -119,15 +237,25 @@
         item.appendChild(bodyNode);
         item.classList.add('open');
         openIds[id] = true;
+        head.setAttribute('aria-expanded', 'true');
       } else if (!wantOpen && bodyNode) {
         item.removeChild(bodyNode);
         bodyNode = null;
         item.classList.remove('open');
         delete openIds[id];
+        head.setAttribute('aria-expanded', 'false');
       }
     }
 
-    head.addEventListener('click', function () { toggle(); });
+    head.addEventListener('click', function () {
+      var opening = !bodyNode;
+      toggle(opening);
+      RT.setRoute('ref', opening ? route : null);
+      if (!opening && routedKey === id) {
+        routedKey = null;
+        render();
+      }
+    });
     if (isOpen) toggle(true);
     return item;
   }
@@ -146,7 +274,7 @@
           '<span style="color:var(--text-3)">re.' + (entry.fn || 'findall') + '(</span>r"' +
           U.esc(entry.pattern) + '"' +
           (entry.fn === 'sub' ? ', r"' + U.esc(entry.repl || '') + '"' : '') +
-          ', text' + (entry.flags ? ', re.' + entry.flags.toUpperCase().split('').join(' | re.') : '') +
+          ', text' + (entry.flags ? ', flags=re.' + entry.flags.toUpperCase().split('').join(' | re.') : '') +
           '<span style="color:var(--text-3)">)</span>'
         }),
         box,
@@ -189,19 +317,11 @@
     }
     if (actions.children.length) kids.push(actions);
 
-    return el('div', { class: 'ref-body' }, kids);
+    return el('div', { class: 'ref-body', id: 'ref-body-' + routeOf(entry) }, kids);
   }
 
   function copy(s) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(s).then(function () { U.toast('Kopiert'); },
-                                            function () { U.toast('Kopieren nicht möglich'); });
-    } else {
-      var ta = el('textarea', { style: 'position:fixed;opacity:0' });
-      ta.value = s; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); U.toast('Kopiert'); } catch (e) { U.toast('Kopieren nicht möglich'); }
-      document.body.removeChild(ta);
-    }
+    U.copyText(s);
   }
 
   function focusSearch() {
@@ -209,5 +329,5 @@
   }
 
   RT.views = RT.views || {};
-  RT.views.ref = { build: build, focusSearch: focusSearch };
+  RT.views.ref = { build: build, focusSearch: focusSearch, openRoute: openRoute };
 })(window);

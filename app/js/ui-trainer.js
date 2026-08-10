@@ -9,17 +9,73 @@
   var level = 1, idx = 0;
   var attempt = { pattern: '', flags: '', hints: 0, revealed: false };
   var caseNodes = [];
+  var pendingRoute = null;
+  var evaluationSeq = 0;
 
   /* ---- Soll-Ergebnisse einmalig aus der Musterlösung berechnen ---- */
   function prepare() {
+    if (RT._exercisesPrepared) return;
     RT.exercises.forEach(function (ex) {
       ex.fn = ex.fn || 'findall';
       ex.cases.forEach(function (c) {
         var res = E.run(ex.solution, ex.flags || '', c.text, ex.fn, { repl: ex.repl });
         c.want = res.ok ? res.display : '⚠ ' + res.error;
+        c.wantValue = res.ok ? res.value : null;
         c.wantMatches = res.ok ? res.matches : [];
       });
     });
+    RT._exercisesPrepared = true;
+  }
+
+  function resultsMatch(res, c, ex) {
+    if (!res.ok || c.wantValue === null) return false;
+    var fn = ex.fn || 'findall';
+    if (fn === 'findall') return E.sameResult(res.value, c.wantValue);
+    if (fn === 'split') return E.sameResult(res.value, c.wantValue);
+    if (fn === 'sub') return res.value === c.wantValue;
+    if (fn === 'finditer') return sameMatchList(res.value, c.wantValue);
+    return sameMatch(res.value, c.wantValue);
+  }
+
+  function sameMatch(a, b) {
+    if (a === null || b === null) return a === b;
+    if (!a || !b || a.start !== b.start || a.end !== b.end || a.text !== b.text) return false;
+    if (!sameArray(a.groups || [], b.groups || [])) return false;
+    var an = a.named || {}, bn = b.named || {};
+    var ak = Object.keys(an).sort(), bk = Object.keys(bn).sort();
+    if (!sameArray(ak, bk)) return false;
+    return ak.every(function (key) { return an[key] === bn[key]; });
+  }
+
+  function sameArray(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  function sameMatchList(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (!sameMatch(a[i], b[i])) return false;
+    return true;
+  }
+
+  function requirementFailures(ex, snap, results) {
+    var failures = [];
+    var requiredFlags = ex.requireFlags || '';
+    for (var i = 0; i < requiredFlags.length; i++) {
+      if (snap.flags.indexOf(requiredFlags[i]) === -1) {
+        failures.push('Aktiviere das geforderte Flag ' + requiredFlags[i] + '.');
+      }
+    }
+    if (ex.requirePatternWhitespace && !/[ \t\n\r\f\v]/.test(snap.pattern)) {
+      failures.push('Verwende wie gefordert sichtbaren Whitespace im Muster.');
+    }
+    if (ex.requireGroupNames && results && results[0] && results[0].ok) {
+      var names = results[0].compiled.groupNames || [];
+      var missing = ex.requireGroupNames.filter(function (name) { return names.indexOf(name) === -1; });
+      if (missing.length) failures.push('Es fehlen die benannten Gruppen: ' + missing.join(', ') + '.');
+    }
+    return failures;
   }
 
   function build(container) {
@@ -30,7 +86,7 @@
     ]));
 
     lvBox = el('div', { class: 'lv-grid' });
-    dotBox = el('div', { class: 'ex-nav' });
+    dotBox = el('div', { class: 'ex-nav', role: 'navigation', 'aria-label': 'Aufgaben dieser Stufe' });
     cardBox = el('div');
     container.appendChild(lvBox);
     container.appendChild(dotBox);
@@ -38,7 +94,45 @@
 
     level = RT.store.get('lastLevel') || 1;
     renderLevels();
-    openLevel(level, true);
+    if (pendingRoute) {
+      openById(pendingRoute);
+      pendingRoute = null;
+    } else {
+      openLevel(level, true);
+    }
+  }
+
+  function exerciseById(id) {
+    for (var i = 0; i < RT.exercises.length; i++) {
+      if (RT.exercises[i].id === id) return RT.exercises[i];
+    }
+    return null;
+  }
+
+  function openById(id) {
+    var ex = exerciseById(id);
+    if (!ex) return false;
+    level = ex.level;
+    RT.store.set('lastLevel', level);
+    var list = exercisesOf(level);
+    idx = list.findIndex(function (e) { return e.id === id; });
+    if (idx < 0) idx = 0;
+    renderLevels();
+    renderDots();
+    openExercise(idx);
+    return true;
+  }
+
+  function openRoute(sub) {
+    if (!sub) return;
+    if (!lvBox) {
+      pendingRoute = sub;
+      return;
+    }
+    if (!openById(sub)) {
+      var list = exercisesOf(level);
+      if (list[idx]) RT.setRoute('train', list[idx].id);
+    }
   }
 
   function renderLevels() {
@@ -48,12 +142,17 @@
       var pct = p.total ? Math.round(p.done / p.total * 100) : 0;
       var card = el('button', {
         type: 'button', class: 'lv-card' + (lv.id === level ? ' on' : ''),
-        style: '--lv:' + lv.color
+        style: '--lv:' + lv.color,
+        'aria-current': lv.id === level ? 'step' : 'false'
       }, [
         el('div', { class: 'lv-n', text: 'STUFE ' + lv.id }),
         el('div', { class: 'lv-name', text: lv.name }),
         el('div', { class: 'lv-sub', text: lv.sub }),
-        el('div', { class: 'lv-bar' }, el('i', { class: 'lv-fill', style: 'width:' + pct + '%' })),
+        el('div', {
+          class: 'lv-bar', role: 'progressbar',
+          'aria-label': 'Fortschritt Stufe ' + lv.id,
+          'aria-valuemin': '0', 'aria-valuemax': String(p.total), 'aria-valuenow': String(p.done)
+        }, el('i', { class: 'lv-fill', style: 'width:' + pct + '%', 'aria-hidden': 'true' })),
         el('div', { class: 'lv-count', text: p.done + ' / ' + p.total + ' gelöst' })
       ]);
       card.addEventListener('click', function () { openLevel(lv.id); });
@@ -70,7 +169,6 @@
     RT.store.set('lastLevel', lv);
     if (!keepIndex) idx = 0;
     var list = exercisesOf(level);
-    // erste ungelöste Aufgabe ansteuern
     if (!keepIndex) {
       var firstOpen = list.findIndex(function (e) { return !RT.store.isSolved(e.id); });
       idx = firstOpen === -1 ? 0 : firstOpen;
@@ -88,7 +186,9 @@
       var d = el('button', {
         type: 'button',
         class: 'ex-dot' + (i === idx ? ' on' : '') + (RT.store.isSolved(ex.id) ? ' solved' : ''),
-        title: ex.title, text: String(i + 1)
+        title: ex.title, text: String(i + 1),
+        'aria-label': 'Aufgabe ' + (i + 1) + ': ' + ex.title,
+        'aria-current': i === idx ? 'step' : 'false'
       });
       d.addEventListener('click', function () { openExercise(i); });
       dotBox.appendChild(d);
@@ -98,9 +198,19 @@
   function openExercise(i) {
     var list = exercisesOf(level);
     idx = Math.max(0, Math.min(i, list.length - 1));
-    attempt = { pattern: '', flags: list[idx].requireFlags || '', hints: 0, revealed: false };
+    evaluateDebounced.cancel();
+    evaluationSeq++;
+    attempt = { pattern: '', flags: '', hints: 0, revealed: false };
     renderDots();
     renderExercise(list[idx]);
+    RT.setRoute('train', list[idx].id);
+    requestAnimationFrame(function () {
+      var heading = cardBox && cardBox.querySelector('.ex-title');
+      if (heading) {
+        heading.setAttribute('tabindex', '-1');
+        heading.focus({ preventScroll: true });
+      }
+    });
   }
 
   function renderExercise(ex) {
@@ -109,19 +219,17 @@
 
     var solved = RT.store.isSolved(ex.id);
 
-    /* --- Kopf --- */
-    var head = el('div', { style: 'display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:4px' }, [
+    var head = el('div', { class: 'ex-head' }, [
       el('span', { class: 'tag', text: 'Aufgabe ' + (idx + 1) + ' / ' + exercisesOf(level).length }),
-      el('h2', { style: 'font-size:19px', text: ex.title }),
-      solved ? el('span', { class: 'tag', style: 'background:var(--ok-soft);color:var(--ok);border-color:transparent', text: 'gelöst' }) : null
+      el('h2', { class: 'ex-title', text: ex.title }),
+      solved ? el('span', { class: 'tag tag-ok', text: 'gelöst' }) : null
     ]);
 
     var task = el('div', { class: 'ex-task', html: ex.task });
 
-    /* --- Eingabe --- */
-    var rx = U.makeRegexInput('', function (v) { attempt.pattern = v; evaluate(ex); },
-                              'Dein Muster …');
-    var flagsUI = U.makeFlags(attempt.flags, function (v) { attempt.flags = v; evaluate(ex); });
+    var rx = U.makeRegexInput('', function (v) { attempt.pattern = v; requestEvaluation(ex); },
+                              'Dein Muster …', 'Dein regulärer Ausdruck');
+    var flagsUI = U.makeFlags(attempt.flags, function (v) { attempt.flags = v; requestEvaluation(ex); }, null, 'Regex-Flags für diese Aufgabe');
 
     var fnHint = ex.fn === 'sub'
       ? el('span', { class: 'hint-r', text: 're.sub(muster, r"' + (ex.repl === '' ? '' : ex.repl) + '", text)' })
@@ -132,15 +240,14 @@
     var inputBlock = el('div', { class: 'pg-block' }, [
       el('div', { class: 'field-head' }, [el('span', { class: 'label', text: 'Dein Muster' }), fnHint]),
       rx.node,
-      el('div', { class: 'pg-row', style: 'margin-top:2px' }, [
+      el('div', { class: 'pg-row pg-row-tight' }, [
         flagsUI.node,
         ex.requireFlags
-          ? el('span', { style: 'font-size:12.5px;color:var(--warn)', text: 'Für diese Aufgabe brauchst du das Flag ' + ex.requireFlags + '.' })
-          : el('span', { style: 'font-size:12.5px;color:var(--text-3)', text: 'Flags bei Bedarf zuschalten.' })
+          ? el('span', { class: 'flag-hint warn', text: 'Für diese Aufgabe brauchst du das Flag ' + ex.requireFlags + '.' })
+          : el('span', { class: 'flag-hint', text: 'Flags bei Bedarf zuschalten.' })
       ])
     ]);
 
-    /* --- Testfälle --- */
     var casesBox = el('div', { class: 'ex-cases' });
     ex.cases.forEach(function (c, ci) {
       var hl = el('div', { class: 'hl-box' });
@@ -167,9 +274,8 @@
       casesBox.appendChild(node);
     });
 
-    /* --- Aktionen --- */
     var hintsBox = el('div', { class: 'hints' });
-    var verdictBox = el('div');
+    var verdictBox = el('div', { class: 'verdict-live', 'aria-live': 'polite', 'aria-atomic': 'true' });
 
     var hintBtn = el('button', { class: 'btn sm', type: 'button', html: U.icon('bulb') + ' Tipp' });
     hintBtn.addEventListener('click', function () {
@@ -186,7 +292,7 @@
       attempt.pattern = ex.solution;
       flagsUI.set(ex.flags || '');
       attempt.flags = ex.flags || '';
-      evaluate(ex);
+      evaluateSync(ex);
       U.toast('Lösung eingesetzt — versteh sie im Playground');
     });
 
@@ -214,7 +320,7 @@
     ]));
 
     cardBox._verdict = verdictBox;
-    evaluate(ex);
+    paintEvaluation(ex, currentSnapshot(), null);
     setTimeout(function () { rx.input.focus(); }, 60);
   }
 
@@ -222,17 +328,27 @@
     var list = exercisesOf(level);
     if (idx + 1 < list.length) { openExercise(idx + 1); return; }
     var nextLv = level + 1;
-    if (nextLv <= RT.levels.length) { openLevel(nextLv); U.toast('Stufe ' + nextLv + ' — weiter geht’s'); }
+    if (nextLv <= RT.levels.length) { openLevel(nextLv); U.toast('Stufe ' + nextLv + ' — weiter geht\'s'); }
     else { U.toast('Alle Stufen durch. Respekt.'); }
   }
 
-  function evaluate(ex) {
+  function currentSnapshot() {
+    return {
+      pattern: attempt.pattern,
+      flags: attempt.flags,
+      revealed: attempt.revealed
+    };
+  }
+
+  function paintEvaluation(ex, snap, results) {
     var verdict = cardBox._verdict;
-    var anyInput = attempt.pattern.trim() !== '';
+    if (!verdict) return;
+    verdict.setAttribute('aria-busy', 'false');
+    var anyInput = snap.pattern !== '';
     var allPass = anyInput;
     var compileError = null;
 
-    caseNodes.forEach(function (cn) {
+    caseNodes.forEach(function (cn, ci) {
       var c = cn.data;
       if (!anyInput) {
         cn.node.className = 'case';
@@ -242,7 +358,11 @@
         cn.got.classList.remove('bad');
         return;
       }
-      var res = E.run(attempt.pattern, attempt.flags, c.text, ex.fn, { repl: ex.repl });
+      var res = results && results[ci];
+      if (!res) {
+        allPass = false;
+        return;
+      }
       if (!res.ok) {
         compileError = res.error;
         allPass = false;
@@ -253,7 +373,7 @@
         cn.got.classList.add('bad');
         return;
       }
-      var ok = res.display === c.want;
+      var ok = resultsMatch(res, c, ex);
       if (!ok) allPass = false;
       cn.node.className = 'case ' + (ok ? 'pass' : 'fail');
       cn.status.textContent = ok ? '✓ passt' : '✗ weicht ab';
@@ -262,12 +382,15 @@
       cn.got.classList.toggle('bad', !ok);
     });
 
+    var requirements = anyInput ? requirementFailures(ex, snap, results) : [];
+    if (requirements.length) allPass = false;
+
     verdict.innerHTML = '';
     if (!anyInput) return;
 
     if (allPass) {
       var wasSolved = RT.store.isSolved(ex.id);
-      if (!attempt.revealed) RT.store.markSolved(ex.id);
+      if (!snap.revealed) RT.store.markSolved(ex.id);
       renderDots();
       renderLevels();
       RT.refreshProgress();
@@ -276,14 +399,18 @@
       nb.addEventListener('click', goNext);
       verdict.appendChild(el('div', { class: 'verdict win' }, [
         el('span', { class: 'big', text: '✓' }),
-        el('span', { text: attempt.revealed
+        el('span', { text: snap.revealed
           ? 'Die Musterlösung passt — probier sie beim nächsten Mal selbst.'
           : (wasSolved ? 'Passt wieder. Alle Testtexte bestanden.' : 'Alle Testtexte bestanden. Sitzt.') }),
         el('span', { class: 'spacer', style: 'flex:1' }),
         nb
       ]));
-      if (!wasSolved && !attempt.revealed) U.toast('Gelöst  ·  ' + ex.title);
-    } else if (!compileError) {
+      if (!wasSolved && !snap.revealed) U.toast('Gelöst  ·  ' + ex.title);
+    } else if (compileError) {
+      verdict.appendChild(el('div', { class: 'verdict miss', text: 'Musterfehler: ' + compileError }));
+    } else if (requirements.length) {
+      verdict.appendChild(el('div', { class: 'verdict miss', text: requirements[0] }));
+    } else {
       var failing = caseNodes.filter(function (c) { return c.node.classList.contains('fail'); }).length;
       verdict.appendChild(el('div', { class: 'verdict miss' }, [
         el('span', { class: 'big', text: '·' }),
@@ -294,9 +421,46 @@
     }
   }
 
+  function evaluateSync(ex) {
+    evaluateDebounced.cancel();
+    var seq = ++evaluationSeq;
+    var snap = currentSnapshot();
+    var results = ex.cases.map(function (c) {
+      return E.run(snap.pattern, snap.flags, c.text, ex.fn, { repl: ex.repl });
+    });
+    if (seq === evaluationSeq) paintEvaluation(ex, snap, results);
+  }
+
+  function evaluateAsync(ex, snap, seq) {
+    var verdict = cardBox._verdict;
+    if (snap.pattern === '') {
+      if (seq === evaluationSeq) paintEvaluation(ex, snap, null);
+      return;
+    }
+    if (verdict) verdict.setAttribute('aria-busy', 'true');
+    var jobs = ex.cases.map(function (c) {
+      return {
+        pattern: snap.pattern, flags: snap.flags, text: c.text,
+        fn: ex.fn, extra: { repl: ex.repl }
+      };
+    });
+    RT.safeRun.batch(jobs).then(function (results) {
+      if (seq !== evaluationSeq) return;
+      paintEvaluation(ex, snap, results);
+    });
+  }
+
+  var evaluateDebounced = U.debounce(evaluateAsync, 90);
+
+  function requestEvaluation(ex) {
+    var seq = ++evaluationSeq;
+    evaluateDebounced(ex, currentSnapshot(), seq);
+  }
+
   RT.views = RT.views || {};
   RT.views.train = {
     build: build,
+    openRoute: openRoute,
     refresh: function () { if (lvBox) { renderLevels(); renderDots(); } }
   };
 })(window);
